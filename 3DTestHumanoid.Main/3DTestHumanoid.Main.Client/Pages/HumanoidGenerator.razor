@@ -322,44 +322,13 @@
     private async Task ToggleWalk()
     {
         isWalking = !isWalking;
-        if (isWalking)
+        if (module is not null)
         {
-            walkCts = new CancellationTokenSource();
-            _ = StartWalkLoop(walkCts.Token);
-        }
-        else
-        {
-            walkCts?.Cancel();
-            recipe.WalkPhase = 0;
-            await Render();
+            await module.InvokeVoidAsync("setAnimationState", isWalking ? "walk" : "idle");
         }
     }
-
-    private async Task StartWalkLoop(CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
-        {
-            try
-            {
-                if (module is not null)
-                {
-                    bool moving = await module.InvokeAsync<bool>("isMoving");
-                    if (moving)
-                    {
-                        recipe.WalkPhase = (recipe.WalkPhase + 0.05f) % 1.0f;
-                        await Render();
-                    }
-                }
-                await Task.Delay(33, token);
-            }
-            catch (TaskCanceledException) { break; }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Animation loop error: " + ex.Message);
-                break;
-            }
-        }
-    }
+    
+    // Legacy Loop Removed
 
     private async Task DownloadGlb()
     {
