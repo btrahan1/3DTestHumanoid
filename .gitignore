@@ -1,0 +1,7 @@
+.vs/
+bin/
+obj/
+*.user
+*.suo
+humanoid_data.json
+testhuman.fbx
