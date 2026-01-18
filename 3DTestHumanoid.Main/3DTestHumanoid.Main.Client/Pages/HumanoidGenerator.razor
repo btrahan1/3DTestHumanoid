@@ -36,6 +36,23 @@
             
             <hr />
 
+            <!-- AI / PASTEBOARD SECTION -->
+            <details class="mb-3">
+                <summary class="small">AI / Pasteboard</summary>
+                <div class="mt-2">
+                    <textarea class="form-control x-small mb-2" rows="5" placeholder="Paste JSON here..." @bind="pasteJson"></textarea>
+                    <button class="btn btn-sm btn-outline-primary w-100" @onclick="ApplyPaste">
+                        <span class="bi bi-magic"></span> Apply Recipe
+                    </button>
+                    @if (!string.IsNullOrEmpty(pasteError))
+                    {
+                        <div class="text-danger x-small mt-1">@pasteError</div>
+                    }
+                </div>
+            </details>
+
+            <hr />
+
             <!-- APPEARANCE SECTION -->
             <h5 class="mb-3">Equipment</h5>
 
@@ -111,6 +128,10 @@
     private HumanoidRecipe recipe = new HumanoidRecipe();
     private bool isWalking = false;
     private bool xRayMode = false;
+    
+    // Pasteboard
+    private string pasteJson = "";
+    private string pasteError = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -145,8 +166,31 @@
     private void ResetRecipe()
     {
         recipe = new HumanoidRecipe();
+        pasteJson = "";
+        pasteError = "";
         StateHasChanged();
         _ = Render();
+    }
+
+    private async Task ApplyPaste()
+    {
+        if (string.IsNullOrWhiteSpace(pasteJson)) return;
+        try 
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var newRecipe = JsonSerializer.Deserialize<HumanoidRecipe>(pasteJson, options);
+            if (newRecipe != null)
+            {
+                recipe = newRecipe;
+                pasteError = "";
+                await Render();
+            }
+        }
+        catch (Exception ex)
+        {
+            pasteError = "Invalid JSON";
+            Console.WriteLine(ex.Message);
+        }
     }
 
     private async Task SaveRecipe()
