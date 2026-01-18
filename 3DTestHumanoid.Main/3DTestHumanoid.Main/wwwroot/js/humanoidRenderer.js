@@ -143,15 +143,26 @@ function createMaterial(name, hexColor, type) {
     mat.diffuseColor = BABYLON.Color3.FromHexString(hexColor);
 
     switch (type) {
+        case 'plate':
+        case 'metal':
+        case 'chain':
+            // High Shine / Metallic
+            mat.specularColor = new BABYLON.Color3(1.0, 1.0, 1.0); // White Reflection
+            mat.specularPower = 64; // Sharp
+            break;
         case 'leather':
             // High Shine
-            mat.specularColor = new BABYLON.Color3(1.0, 1.0, 1.0); // White Reflection
+            mat.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5); // Grey Reflection
             mat.specularPower = 32; // Tight, gloss highlight
             break;
         case 'cloth':
             // No Shine
             mat.specularColor = new BABYLON.Color3(0.0, 0.0, 0.0); // No Reflection
             mat.specularPower = 0;
+            break;
+        case 'wood':
+            mat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); // Low Shine
+            mat.specularPower = 4;
             break;
         case 'skin':
         default:
@@ -162,6 +173,12 @@ function createMaterial(name, hexColor, type) {
     }
 
     mat.backFaceCulling = false;
+
+    // Z-Offset to prevent Z-Fighting (Black Splotches)
+    if (type !== 'skin') {
+        mat.zOffset = -1.0; // Draw slightly closer to camera
+    }
+
     return mat;
 }
 
@@ -227,6 +244,14 @@ export async function loadHumanoidFbx() {
         scene.registerBeforeRender(() => {
             updateMovement();
             updateAnimation();
+
+            // SYNC SKELETONS TO ROOT (Fix for "Loses its mind")
+            // Ensure clothing skeletons follow the character movement if they drift.
+            // (Note: Usually parenting mesh is enough, but cloned skeletons can be finicky).
+            if (characterRoot) {
+                // If we need to manual sync, we would do it here.
+                // But first, let's try the overrideMesh fix in createClothingMesh.
+            }
         });
 
         console.log("Procedural Humanoid Created!");
@@ -363,9 +388,7 @@ export function setMorphology(shoulder, leg, arm, head, thickness = 1.0) {
 }
 
 // --- CLOTHING MESH GENERATOR ---
-function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null) {
-    console.log(`createClothingMesh: Called for ${name}`);
-
+function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null, includeBones = null) {
     if (!window.humanoidData || !scene) return;
     const data = window.humanoidData;
     const regionIds = data.regionIds;
@@ -452,15 +475,23 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
             const b1 = getDominantBone(i1);
             const b2 = getDominantBone(i2);
 
-            if (!excludeBones.includes(b0) && !excludeBones.includes(b1) && !excludeBones.includes(b2)) {
-                const n0 = addVertex(i0);
-                const n1 = addVertex(i1);
-                const n2 = addVertex(i2);
+            // EXCLUDE check
+            if (excludeBones.length > 0) {
+                if (excludeBones.includes(b0) || excludeBones.includes(b1) || excludeBones.includes(b2)) continue;
+            }
 
-                // If any vertex was clipped (returns -1), drop the triangle
-                if (n0 !== -1 && n1 !== -1 && n2 !== -1) {
-                    newIndices.push(n0, n1, n2);
-                }
+            // INCLUDE check
+            if (includeBones) {
+                if (!includeBones.includes(b0) || !includeBones.includes(b1) || !includeBones.includes(b2)) continue;
+            }
+
+            const n0 = addVertex(i0);
+            const n1 = addVertex(i1);
+            const n2 = addVertex(i2);
+
+            // If any vertex was clipped (returns -1), drop the triangle
+            if (n0 !== -1 && n1 !== -1 && n2 !== -1) {
+                newIndices.push(n0, n1, n2);
             }
         }
     }
@@ -483,36 +514,27 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
 
     vertexData.applyToMesh(mesh);
 
-    // CRITICAL FIX: Manually build a FRESH skeleton instead of cloning
-    // Cloning was corrupting Bone 0. Manual rebuild ensures clean state.
-    const newSkel = new BABYLON.Skeleton(name + "_skel", name + "_skel_id", scene);
-    const babylonBones = [];
-
-    data.bones.forEach((b, i) => {
-        const parent = b.parentIndex !== -1 ? babylonBones[b.parentIndex] : null;
-        const matrix = BABYLON.Matrix.Translation(b.pos[0], b.pos[1], b.pos[2]);
-        const bone = new BABYLON.Bone(b.name, newSkel, parent, matrix);
-        babylonBones.push(bone);
-    });
-
-    newSkel.returnToRest();
-    clothingSkeletons.push(newSkel);
-
-    mesh.skeleton = newSkel;
+    // 4. Shared Skeleton Strategy (Fixes "Explosion" and "Ghosting")
+    // Instead of cloning the skeleton (which desynchronizes), we use the main skeletonProxy.
+    // This ensures perfect synchronization with the body.
+    mesh.skeleton = skeletonProxy;
     mesh.numBoneInfluencers = 4;
     mesh.refreshBoundingInfo();
 
     // Material (Uses new PBR Helper)
     mesh.material = createMaterial(name + "_mat", colorHex, matType);
 
+    // Parent to Root so it moves with the character
     mesh.parent = characterRoot;
 }
+
 
 export function renderHumanoid(bodyParts) {
     if (!scene || !characterRoot) return;
 
     // Clean up old meshes AND skeletons
     scene.meshes.filter(m => m.name.startsWith("cloth_")).forEach(m => m.dispose());
+    scene.meshes.filter(m => m.name.startsWith("armor_")).forEach(m => m.dispose()); // FIX: Cleanup new armor slots
     scene.meshes.filter(m => m.name.startsWith("proc_")).forEach(m => m.dispose());
     scene.meshes.filter(m => m.name.includes("_debug")).forEach(m => m.dispose());
 
@@ -620,27 +642,90 @@ export function renderHumanoid(bodyParts) {
         });
     }
 
-    const shirtColor = bodyParts.find(p => p.name.includes("Shirt"))?.color || "#3B5998";
-    const pantsColor = bodyParts.find(p => p.name.includes("Pants"))?.color || "#3B5998";
-    const bootColor = bodyParts.find(p => p.name.includes("Boot"))?.color || "#3D2B1F";
+    // --- ARMOR & CLOTHING SLOT SYSTEM ---
+    // Format: "Slot_Type" (e.g. "Torso_PlateArmor", "Legs_Pants")
 
-    // BONE IDs:
-    // LeftHand: 8, RightHand: 12
-    // LeftFoot: 15, RightFoot: 18
-    // LeftUpLeg: 13, RightUpLeg: 16
+    bodyParts.forEach(part => {
+        const parts = part.name.split('_');
+        if (parts.length < 2) return;
 
-    if (hasShirt) {
-        // Shirt: Cloth
-        createClothingMesh("cloth_shirt", [1, 2, 3], 1.2, shirtColor, 'cloth', [8, 12]);
-    }
-    if (hasPants) {
-        // Pants: Cloth (Full Length - Tucks into boots due to lower inflation)
-        createClothingMesh("cloth_pants", [4, 5, 6], 1.6, pantsColor, 'cloth', []);
-    }
-    if (hasBoots) {
-        // Boots: Leather (Clipped at Knee Height ~45)
-        createClothingMesh("cloth_boots", [5, 6], 2.4, bootColor, 'leather', [], 45.0);
-    }
+        const slot = parts[0]; // Torso, Legs, Feet, etc.
+        const type = parts[1]; // PlateArmor, Pants, etc.
+
+        let regions = [];
+        let inflation = 1.0;
+        let matType = 'cloth';
+        let maxHeight = null;
+        let exclusions = [];
+        let includeBones = null;
+
+        // 1. Determine Dimensions & Material based on TYPE
+        if (type.includes("Plate")) {
+            inflation = 2.5;
+            matType = 'metal';
+        } else if (type.includes("Chain")) {
+            inflation = 1.6;
+            matType = 'chain';
+        } else if (type.includes("Leather")) {
+            inflation = 1.4;
+            matType = 'leather';
+        } else {
+            // Default Cloth
+            inflation = 1.2;
+            matType = 'cloth';
+        }
+
+        // 2. Determine Regions based on SLOT
+        if (slot === "Torso") {
+            regions = [1]; // Torso + Clavicles usually
+            // STRICTLY Torso (Vest/Cuirass)
+            // Bones: 0 (Hips), 1,2,3 (Spines), 4 (Neck)
+            includeBones = [0, 1, 2, 3, 4];
+
+        } else if (slot === "Shoulders") {
+            regions = [1, 2, 3]; // Torso + Arms
+            // Bones: 5 (LeftShoulder), 9 (RightShoulder)
+            // Plus maybe top of UpperArms (6, 10)? Pauldrons usually hang over.
+            includeBones = [5, 6, 9, 10];
+            inflation += 0.5; // Make them float a bit
+
+        } else if (slot === "Arms") {
+            regions = [2, 3]; // Arms
+            // Bones: 6, 7 (Left Arm/Forearm), 10, 11 (Right Arm/Forearm)
+            // EXCLUDE Hands (8, 12)
+            includeBones = [6, 7, 10, 11];
+
+        } else if (slot === "Legs") {
+            regions = [4, 5, 6]; // Hips + Legs
+            if (matType === 'cloth') inflation = 1.2; // Pants tightness
+            if (matType === 'cloth') exclusions = []; // Tucks into boots
+
+        } else if (slot === "Feet") {
+            regions = [5, 6]; // Legs
+            maxHeight = 45.0; // Knee High
+            if (type.includes("Plate")) inflation = 2.6;
+            else if (type.includes("Cloth") || type.includes("Shoes")) inflation = 1.4; // Shoes/Wraps
+            else inflation = 2.4; // Leather Boots
+
+        } else if (slot === "Hands") {
+            regions = [2, 3]; // Arms
+            inflation += 0.1;
+            includeBones = [8, 12]; // Strictly Hands
+
+
+        } else if (slot === "Head") {
+            regions = [0]; // Head
+            if (type.includes("Cloth")) inflation = 1.25;
+            else inflation = 1.5;
+        }
+
+        // 3. GENERATE
+        if (regions.length > 0) {
+            // Unique ID for the mesh
+            const meshName = `armor_${slot}_${type}`;
+            createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones);
+        }
+    });
 }
 
 export function downloadModel(filename) {

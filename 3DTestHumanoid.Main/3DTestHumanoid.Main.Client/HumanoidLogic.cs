@@ -22,10 +22,14 @@ public class HumanoidRecipe
     // Config
     public string BodyType { get; set; } = "Average";
 
-    // Clothing Layer
-    public bool HasShirt { get; set; } = false;
-    public bool HasPants { get; set; } = false;
-    public bool HasBoots { get; set; } = false;
+    // Clothing & Armor Slots
+    public string HeadSlot { get; set; } = "None";   // None, LeatherHelm, ChainHood, PlateHelm
+    public string ShouldersSlot { get; set; } = "None"; // None, LeatherPauldrons, PlatePauldrons
+    public string TorsoSlot { get; set; } = "None"; // None, Shirt, LeatherVest, Chainmail, PlateArmor
+    public string ArmsSlot { get; set; } = "None"; // None, Sleeves, Bracers
+    public string LegsSlot { get; set; } = "None";  // None, Pants, LeatherChaps, ChainLegs, PlateGreaves
+    public string FeetSlot { get; set; } = "None";  // None, Boots, PlateBoots
+    public string HandsSlot { get; set; } = "None";  // None, LeatherGloves, PlateGauntlets
 
     // Arsenal
     public bool HasSword { get; set; } = false;
@@ -34,6 +38,7 @@ public class HumanoidRecipe
     
     public string ClothColor { get; set; } = "#3B5998"; // Denim Blue
     public string LeatherColor { get; set; } = "#3D2B1F"; // Dark Brown
+    public string ChainColor { get; set; } = "#685948"; // Rusty Iron
     public string MetalColor { get; set; } = "#C0C0C0"; // Silver
     public string WoodColor { get; set; } = "#5C4033"; // Wood
 }
@@ -66,19 +71,75 @@ public static class HumanoidSolver
         // We only pass flags to the renderer now. 
         // The Geometry is handled by Mesh Inflation in JS (Option B).
 
-        if (recipe.HasShirt)
+        if (!string.Equals(recipe.HeadSlot, "None", StringComparison.OrdinalIgnoreCase))
         {
-             parts.Add(new BodyPartDto { Name = "Shirt", Color = recipe.ClothColor });
+             string col = recipe.MetalColor;
+             if (recipe.HeadSlot.Contains("Leather")) col = recipe.LeatherColor;
+             if (recipe.HeadSlot.Contains("Cloth") || recipe.HeadSlot.Contains("Hood")) col = recipe.ClothColor;
+             if (recipe.HeadSlot.Contains("Chain")) col = recipe.ChainColor;
+             
+             parts.Add(new BodyPartDto { Name = $"Head_{recipe.HeadSlot}", Color = col });
         }
 
-        if (recipe.HasPants)
+        if (!string.Equals(recipe.ShouldersSlot, "None", StringComparison.OrdinalIgnoreCase))
         {
-            parts.Add(new BodyPartDto { Name = "Pants", Color = recipe.ClothColor });
+             string col = recipe.LeatherColor;
+             if (recipe.ShouldersSlot.Contains("Cloth")) col = recipe.ClothColor;
+             if (recipe.ShouldersSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.ShouldersSlot.Contains("Plate")) col = recipe.MetalColor;
+
+             parts.Add(new BodyPartDto { Name = $"Shoulders_{recipe.ShouldersSlot}", Color = col });
+        }
+
+        if (!string.Equals(recipe.TorsoSlot, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             // Determine color based on material hint in name
+             string col = recipe.ClothColor;
+             if (recipe.TorsoSlot.Contains("Leather")) col = recipe.LeatherColor;
+             if (recipe.TorsoSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.TorsoSlot.Contains("Plate")) col = recipe.MetalColor;
+             
+             parts.Add(new BodyPartDto { Name = $"Torso_{recipe.TorsoSlot}", Color = col });
+        }
+
+        if (!string.Equals(recipe.ArmsSlot, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             string col = recipe.ClothColor; // Default to Sleeves
+             if (recipe.ArmsSlot.Contains("Leather")) col = recipe.LeatherColor;
+             if (recipe.ArmsSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.ArmsSlot.Contains("Plate")) col = recipe.MetalColor;
+
+             parts.Add(new BodyPartDto { Name = $"Arms_{recipe.ArmsSlot}", Color = col });
+        }
+
+        if (!string.Equals(recipe.LegsSlot, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             string col = recipe.ClothColor;
+             if (recipe.LegsSlot.Contains("Leather")) col = recipe.LeatherColor;
+             if (recipe.LegsSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.LegsSlot.Contains("Plate")) col = recipe.MetalColor;
+
+             parts.Add(new BodyPartDto { Name = $"Legs_{recipe.LegsSlot}", Color = col });
         }
         
-        if (recipe.HasBoots)
+        if (!string.Equals(recipe.FeetSlot, "None", StringComparison.OrdinalIgnoreCase))
         {
-             parts.Add(new BodyPartDto { Name = "Boots", Color = recipe.LeatherColor });
+             string col = recipe.LeatherColor;
+             if (recipe.FeetSlot.Contains("Cloth") || recipe.FeetSlot.Contains("Shoes")) col = recipe.ClothColor;
+             if (recipe.FeetSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.FeetSlot.Contains("Plate")) col = recipe.MetalColor;
+
+             parts.Add(new BodyPartDto { Name = $"Feet_{recipe.FeetSlot}", Color = col });
+        }
+
+        if (!string.Equals(recipe.HandsSlot, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             string col = recipe.LeatherColor;
+             if (recipe.HandsSlot.Contains("Cloth") || recipe.HandsSlot.Contains("Gloves")) col = recipe.ClothColor;
+             if (recipe.HandsSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.HandsSlot.Contains("Plate") || recipe.HandsSlot.Contains("Gauntlet")) col = recipe.MetalColor;
+
+             parts.Add(new BodyPartDto { Name = $"Hands_{recipe.HandsSlot}", Color = col });
         }
 
         // --- ARSENAL (Local Space Geometry) ---

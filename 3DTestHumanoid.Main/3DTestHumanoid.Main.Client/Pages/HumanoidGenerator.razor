@@ -62,17 +62,77 @@
                        @bind="recipe.SkinColor" @bind:event="oninput" @onchange="Render" />
             </div>
 
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" checked="@recipe.HasShirt" @onchange="@(async e => { recipe.HasShirt = (bool)(e.Value ?? false); await Render(); })">
-                <label class="form-check-label">Shirt</label>
+            <!-- ARMOR SLOTS -->
+            <h5 class="mb-2">Armor</h5>
+            <div class="mb-2">
+                <label class="form-label x-small">Head</label>
+                <select class="form-select form-select-sm" @bind="recipe.HeadSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="ClothHood">Cloth Hood</option>
+                    <option value="LeatherHelm">Leather Helm</option>
+                    <option value="ChainHood">Chain Hood</option>
+                    <option value="PlateHelm">Plate Helm</option>
+                </select>
             </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" checked="@recipe.HasPants" @onchange="@(async e => { recipe.HasPants = (bool)(e.Value ?? false); await Render(); })">
-                <label class="form-check-label">Pants</label>
+            <div class="mb-2">
+                 <label class="form-label x-small">Shoulders</label>
+                <select class="form-select form-select-sm" @bind="recipe.ShouldersSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="ClothPauldrons">Cloth Mantle</option>
+                    <option value="LeatherPauldrons">Leather Pauldrons</option>
+                    <option value="ChainPauldrons">Chain Mantle</option>
+                    <option value="PlatePauldrons">Plate Pauldrons</option>
+                </select>
             </div>
-            <div class="form-check mb-4">
-                <input class="form-check-input" type="checkbox" checked="@recipe.HasBoots" @onchange="@(async e => { recipe.HasBoots = (bool)(e.Value ?? false); await Render(); })">
-                <label class="form-check-label">Boots</label>
+            <div class="mb-2">
+                 <label class="form-label x-small">Chest</label>
+                <select class="form-select form-select-sm" @bind="recipe.TorsoSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="Shirt">Shirt (Cloth)</option>
+                    <option value="LeatherVest">Leather Vest</option>
+                    <option value="Chainmail">Chainmail</option>
+                    <option value="PlateArmor">Plate Armor</option>
+                </select>
+            </div>
+             <div class="mb-2">
+                 <label class="form-label x-small">Arms</label>
+                <select class="form-select form-select-sm" @bind="recipe.ArmsSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="ClothSleeves">Cloth Sleeves</option>
+                    <option value="LeatherBracers">Leather Arms</option>
+                    <option value="ChainSleeves">Chain Sleeves</option>
+                    <option value="PlateVambraces">Plate Vambraces</option>
+                </select>
+            </div>
+             <div class="mb-2">
+                 <label class="form-label x-small">Hands</label>
+                <select class="form-select form-select-sm" @bind="recipe.HandsSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="ClothGloves">Cloth Gloves</option>
+                    <option value="LeatherGloves">Leather Gloves</option>
+                    <option value="ChainGloves">Chain Gloves</option>
+                    <option value="PlateGauntlets">Plate Gauntlets</option>
+                </select>
+            </div>
+            <div class="mb-2">
+                 <label class="form-label x-small">Legs</label>
+                <select class="form-select form-select-sm" @bind="recipe.LegsSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="Pants">Pants (Cloth)</option>
+                    <option value="LeatherChaps">Leather Chaps</option>
+                    <option value="ChainLegs">Chain Legs</option>
+                    <option value="PlateGreaves">Plate Greaves</option>
+                </select>
+            </div>
+            <div class="mb-2">
+                 <label class="form-label x-small">Feet</label>
+                <select class="form-select form-select-sm" @bind="recipe.FeetSlot" @bind:after="Render">
+                    <option value="None">None</option>
+                    <option value="ClothShoes">Cloth Shoes</option>
+                    <option value="Boots">Boots (Leather)</option>
+                    <option value="ChainBoots">Chain Boots</option>
+                    <option value="PlateBoots">Plate Boots</option>
+                </select>
             </div>
 
             <!-- MORPHOLOGY SECTION -->
