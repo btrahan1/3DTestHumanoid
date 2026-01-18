@@ -79,6 +79,15 @@
             <h5 class="mb-3">Morphology</h5>
             
             <div class="mb-3">
+                <label class="form-label small">Body Type</label>
+                <select class="form-select" @bind="recipe.BodyType" @bind:after="Render">
+                    <option value="Average">Average</option>
+                    <option value="Heavy">Heavy (Tank)</option>
+                    <option value="Lean">Lean (Speed)</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
                 <label class="form-label small">Height Scale: <strong>@recipe.HeightScale.ToString("0.0")x</strong></label>
                 <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
                        @bind="recipe.HeightScale" @bind:event="oninput" @onchange="Render" />
@@ -180,7 +189,13 @@
             // Update Visuals
             await module.InvokeVoidAsync("renderHumanoid", HumanoidSolver.Solve(recipe));
             await module.InvokeVoidAsync("setBodyScale", recipe.HeightScale, recipe.WidthScale);
-            await module.InvokeVoidAsync("setMorphology", recipe.ShoulderWidth, recipe.LegLength, recipe.ArmLength, recipe.HeadSize);
+            
+            // Calculate Thickness derived from BodyType
+            float thickness = 1.0f;
+            if (recipe.BodyType.Equals("Heavy", StringComparison.OrdinalIgnoreCase)) thickness = 1.30f;
+            else if (recipe.BodyType.Equals("Lean", StringComparison.OrdinalIgnoreCase)) thickness = 0.85f;
+
+            await module.InvokeVoidAsync("setMorphology", recipe.ShoulderWidth, recipe.LegLength, recipe.ArmLength, recipe.HeadSize, thickness);
             await module.InvokeVoidAsync("setSkinColor", recipe.SkinColor);
         }
     }

@@ -18,6 +18,9 @@ public class HumanoidRecipe
     public float HeadSize { get; set; } = 1.0f;      // Head Uniform
 
     public string SkinColor { get; set; } = "#D2B48C";
+    
+    // Config
+    public string BodyType { get; set; } = "Average";
 
     // Clothing Layer
     public bool HasShirt { get; set; } = false;

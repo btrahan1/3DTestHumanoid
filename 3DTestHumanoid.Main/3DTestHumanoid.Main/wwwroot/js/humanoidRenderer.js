@@ -7,53 +7,9 @@ let skeletonProxy = null;
 let clothingSkeletons = []; // Store cloned skeletons for animation
 let inputMap = {};
 
-export function initCanvas(canvasId) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
 
-    if (engine) engine.dispose();
+// Duplicate removed
 
-    engine = new BABYLON.Engine(canvas, true);
-    scene = new BABYLON.Scene(engine);
-    scene.clearColor = new BABYLON.Color4(0.1, 0.1, 0.12, 1);
-
-    // Root node
-    characterRoot = new BABYLON.TransformNode("characterRoot", scene);
-
-    // Camera
-    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 300, new BABYLON.Vector3(0, 90, 0), scene);
-    camera.lockedTarget = characterRoot;
-    camera.attachControl(canvas, true);
-    camera.lowerRadiusLimit = 50;
-    camera.upperRadiusLimit = 1000;
-
-    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-    light.intensity = 0.8;
-    const pl = new BABYLON.PointLight("pl", new BABYLON.Vector3(100, 100, -100), scene);
-    pl.intensity = 0.6;
-
-    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 2000, height: 2000 }, scene);
-    const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
-    groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.2);
-    groundMat.specularColor = new BABYLON.Color3(0, 0, 0);
-    ground.material = groundMat;
-
-    // Input handling
-    scene.actionManager = new BABYLON.ActionManager(scene);
-    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyDownTrigger, (evt) => {
-        inputMap[evt.sourceEvent.key.toLowerCase()] = true;
-    }));
-    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyUpTrigger, (evt) => {
-        inputMap[evt.sourceEvent.key.toLowerCase()] = false;
-    }));
-
-    engine.runRenderLoop(() => {
-        scene.render();
-    });
-    window.addEventListener("resize", () => { engine.resize(); });
-
-    loadHumanoidFbx();
-}
 
 let animState = "idle";
 
@@ -130,6 +86,85 @@ function updateMovement() {
     animState = isMoving ? "walk" : "idle";
 }
 
+// --- INITIALIZATION ---
+export function initCanvas(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    if (engine) engine.dispose();
+
+    engine = new BABYLON.Engine(canvas, true);
+    scene = new BABYLON.Scene(engine);
+    // Lighter background to see shadows/contrast
+    scene.clearColor = new BABYLON.Color4(0.4, 0.4, 0.4, 1.0);
+
+    // Root node
+    characterRoot = new BABYLON.TransformNode("characterRoot", scene);
+
+    // Camera
+    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 300, new BABYLON.Vector3(0, 90, 0), scene);
+    camera.lockedTarget = characterRoot;
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 50;
+    camera.upperRadiusLimit = 1000;
+
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    light.intensity = 0.8;
+    const pl = new BABYLON.PointLight("pl", new BABYLON.Vector3(100, 100, -100), scene);
+    pl.intensity = 0.6;
+
+    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 2000, height: 2000 }, scene);
+    const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+    groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+    groundMat.specularColor = new BABYLON.Color3(0, 0, 0);
+    ground.material = groundMat;
+
+    // Input handling
+    scene.actionManager = new BABYLON.ActionManager(scene);
+    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyDownTrigger, (evt) => {
+        inputMap[evt.sourceEvent.key.toLowerCase()] = true;
+    }));
+    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyUpTrigger, (evt) => {
+        inputMap[evt.sourceEvent.key.toLowerCase()] = false;
+    }));
+
+    engine.runRenderLoop(() => {
+        scene.render();
+    });
+    window.addEventListener("resize", () => { engine.resize(); });
+
+    loadHumanoidFbx();
+}
+
+// --- MATERIAL SYSTEM ---
+function createMaterial(name, hexColor, type) {
+    // FALLBACK: Using StandardMaterial for guaranteed "Video Game" shine
+    const mat = new BABYLON.StandardMaterial(name, scene);
+    mat.diffuseColor = BABYLON.Color3.FromHexString(hexColor);
+
+    switch (type) {
+        case 'leather':
+            // High Shine
+            mat.specularColor = new BABYLON.Color3(1.0, 1.0, 1.0); // White Reflection
+            mat.specularPower = 32; // Tight, gloss highlight
+            break;
+        case 'cloth':
+            // No Shine
+            mat.specularColor = new BABYLON.Color3(0.0, 0.0, 0.0); // No Reflection
+            mat.specularPower = 0;
+            break;
+        case 'skin':
+        default:
+            // Soft Shine
+            mat.specularColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+            mat.specularPower = 8; // Broad, soft highlight
+            break;
+    }
+
+    mat.backFaceCulling = false;
+    return mat;
+}
+
 // Global Data Store
 window.humanoidData = null;
 
@@ -181,12 +216,8 @@ export async function loadHumanoidFbx() {
         mesh.skeleton = skeletonProxy;
         mesh.numBoneInfluencers = 4;
 
-        // Material
-        const mat = new BABYLON.StandardMaterial("humanMat", scene);
-        mat.diffuseColor = new BABYLON.Color3(1.0, 0.8, 0.7);
-        mat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-        mat.backFaceCulling = false;
-        mesh.material = mat;
+        // Material (SKIN)
+        mesh.material = createMaterial("humanMat", "#D2B48C", 'skin');
 
         mesh.parent = characterRoot;
         mesh.scaling = new BABYLON.Vector3(1, 1, 1);
@@ -223,7 +254,7 @@ export function setXRayMode(enabled) {
 export function setSkinColor(hexColor) {
     const mesh = scene.getMeshByName("customHumanoid");
     if (!mesh) return;
-    mesh.material.diffuseColor = BABYLON.Color3.FromHexString(hexColor);
+    mesh.material.albedoColor = BABYLON.Color3.FromHexString(hexColor);
 }
 export function isMoving() { return animState === "walk"; }
 export function getCharacterPosition() {
@@ -233,34 +264,87 @@ export function getCharacterPosition() {
 // ------ CLOTHING GENERATION ------
 
 // --- MORPHOLOGY ---
-// --- MORPHOLOGY ---
-export function setMorphology(shoulder, leg, arm, head) {
+export function setMorphology(shoulder, leg, arm, head, thickness = 1.0) {
+    console.log(`setMorphology: Shoulder=${shoulder}, Leg=${leg}, Arm=${arm}, Head=${head}, Thickness=${thickness}`);
     const allSkeletons = [skeletonProxy, ...clothingSkeletons].filter(s => s);
     if (!allSkeletons.length) return;
 
+
+
     allSkeletons.forEach(skel => {
+
         // Helper
-        const setY = (idx, val) => {
-            if (skel.bones[idx]) skel.bones[idx].scaling.y = val;
+        const setScale = (idx, x, y, z) => {
+            if (skel.bones[idx]) skel.bones[idx].scaling = new BABYLON.Vector3(x, y, z);
         };
-        const setX = (idx, val) => {
-            if (skel.bones[idx]) skel.bones[idx].scaling.x = val;
+
+        // LEGS: Length = Y, Thickness = X, Z
+        const setLeg = (idx, len, thick) => {
+            if (skel.bones[idx]) {
+                skel.bones[idx].scaling = new BABYLON.Vector3(thick, len, thick);
+            }
         };
+
+        // ARMS: Length = X, Thickness = Y, Z (Based on T-Pose)
+        const setArm = (idx, len, thick) => {
+            if (skel.bones[idx]) {
+                // IMPORTANT: X is Length for Arms
+                skel.bones[idx].scaling = new BABYLON.Vector3(len, thick, thick);
+            }
+        };
+
+        // HEAD: Uniform
         const setUniform = (idx, val) => {
             if (skel.bones[idx]) skel.bones[idx].scaling = new BABYLON.Vector3(val, val, val);
         };
 
-        // LEGS: Scale Thighs (13, 16) and Shins/Calves (14, 17)
-        setY(13, leg); // L UpLeg
-        setY(16, leg); // R UpLeg
-        setY(14, leg); // L Leg
-        setY(17, leg); // R Leg
+        // INVERSE: For Hands/Feet, inverted scale must match the Parent's Length/Thick mix
+        // Arms (Parent X=Len) -> Hand needs X=1/Len
+        // Legs (Parent Y=Len) -> Foot needs Y=1/Len
+        const setInverseArm = (idx, len, thick) => {
+            if (skel.bones[idx]) {
+                skel.bones[idx].scaling = new BABYLON.Vector3(1 / len, 1 / thick, 1 / thick);
+            }
+        };
+        const setInverseLeg = (idx, len, thick) => {
+            if (skel.bones[idx]) {
+                skel.bones[idx].scaling = new BABYLON.Vector3(1 / thick, 1 / len, 1 / thick);
+            }
+        };
 
-        // ARMS: Scale UpArms (6, 10) and ForeArms (7, 11)
-        setY(6, arm);  // L UpArm
-        setY(10, arm); // R UpArm
-        setY(7, arm);  // L ForeArm
-        setY(11, arm); // R ForeArm
+        // 1. LEGS (13, 16, 14, 17)
+        // Dampen thickness effect on legs to prevent "bulge above knee" (User Request)
+        // If thickness is 1.2 (Heavy), Legs become 1.1.
+        const legThickness = 1.0 + (thickness - 1.0) * 0.5;
+
+        // Inherits: X=Thick, Y=1, Z=Thick (from Hips)
+        // Target:   X=Thick, Y=Len, Z=Thick
+        // Local:    X=1, Y=Len, Z=1
+        // Since Hips are NOT scaled by thickness (reverted previously), we apply full legThickness.
+
+        const legLocalThick = legThickness;
+
+        setScale(13, legLocalThick, leg, legLocalThick);
+        setScale(16, legLocalThick, leg, legLocalThick);
+        setScale(14, legLocalThick, leg, legLocalThick);
+        setScale(17, legLocalThick, leg, legLocalThick);
+
+        // 2. FEET (15, 18)
+        // Inherits: X=LegThick, Y=Len, Z=LegThick
+        // Target:   X=1, Y=1, Z=1
+        // Local:    1/LegThick, 1/Len, 1/LegThick
+        setScale(15, 1.0 / legThickness, 1.0 / leg, 1.0 / legThickness);
+        setScale(18, 1.0 / legThickness, 1.0 / leg, 1.0 / legThickness);
+
+        // 3. ARMS (6, 10, 7, 11)
+        setArm(6, arm, thickness);
+        setArm(10, arm, thickness);
+        setArm(7, arm, thickness);
+        setArm(11, arm, thickness);
+
+        // 4. HANDS (8, 12) - Inverse of Arm Scale
+        setInverseArm(8, arm, thickness);
+        setInverseArm(12, arm, thickness);
 
         // HEAD: Scale Uniform (Index 4)
         setUniform(4, head);
@@ -279,7 +363,7 @@ export function setMorphology(shoulder, leg, arm, head) {
 }
 
 // --- CLOTHING MESH GENERATOR ---
-function createClothingMesh(name, targetRegions, inflateAmount, colorHex, excludeBones = []) {
+function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null) {
     console.log(`createClothingMesh: Called for ${name}`);
 
     if (!window.humanoidData || !scene) return;
@@ -295,9 +379,6 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
 
     // Helper: Get Primary Bone Index for a vertex
     const getDominantBone = (oldIdx) => {
-        // Just check the first bone index (usually the highest weight in sorted export, 
-        // but even if not, if it has ANY weight it's relevant). 
-        // Ideally we check the one with max weight.
         let maxW = 0;
         let mainB = -1;
         for (let k = 0; k < 4; k++) {
@@ -305,7 +386,6 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
                 maxW = data.matricesWeights[oldIdx * 4 + k];
                 mainB = data.matricesIndices[oldIdx * 4 + k];
             }
-            // If weights are equal, prefer lower bone index (arbitrary tie-breaker)
             else if (data.matricesWeights[oldIdx * 4 + k] === maxW && data.matricesIndices[oldIdx * 4 + k] < mainB) {
                 mainB = data.matricesIndices[oldIdx * 4 + k];
             }
@@ -316,11 +396,14 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
     const addVertex = (oldIdx) => {
         if (indexMap.has(oldIdx)) return indexMap.get(oldIdx);
 
+        // Position Check
+        const py = data.positions[oldIdx * 3 + 1];
+        if (maxHeight !== null && py > maxHeight) return -1; // CLIP
+
         const newIdx = newPositions.length / 3;
 
         // Position + Inflation
         const px = data.positions[oldIdx * 3];
-        const py = data.positions[oldIdx * 3 + 1];
         const pz = data.positions[oldIdx * 3 + 2];
 
         const baseMesh = scene.getMeshByName("customHumanoid");
@@ -328,7 +411,7 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
         if (baseMesh) {
             const normals = baseMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
             if (normals) {
-                // FLIP NORMALS: FBX data is inverted, so we flip to point Outwards
+                // FLIP NORMALS: FBX data is inverted
                 nx = -normals[oldIdx * 3];
                 ny = -normals[oldIdx * 3 + 1];
                 nz = -normals[oldIdx * 3 + 2];
@@ -339,7 +422,7 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
         newPositions.push(py + ny * inflateAmount);
         newPositions.push(pz + nz * inflateAmount);
 
-        // Weights (Clean Pass)
+        // Weights
         newMatricesIndices.push(data.matricesIndices[oldIdx * 4], data.matricesIndices[oldIdx * 4 + 1], data.matricesIndices[oldIdx * 4 + 2], data.matricesIndices[oldIdx * 4 + 3]);
         newMatricesWeights.push(data.matricesWeights[oldIdx * 4], data.matricesWeights[oldIdx * 4 + 1], data.matricesWeights[oldIdx * 4 + 2], data.matricesWeights[oldIdx * 4 + 3]);
 
@@ -357,14 +440,14 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
         const r1 = regionIds[i1];
         const r2 = regionIds[i2];
 
-        // REGION FILTER: "At least 2 vertices" (Fixes Seams/Groin Gap)
+        // REGION FILTER
         let matchCount = 0;
         if (targetRegions.includes(r0)) matchCount++;
         if (targetRegions.includes(r1)) matchCount++;
         if (targetRegions.includes(r2)) matchCount++;
 
         if (matchCount >= 2) {
-            // BONE EXCLUSION FILTER: Drop triangle if ANY vertex is dominated by an excluded bone
+            // BONE & HEIGHT FILTER
             const b0 = getDominantBone(i0);
             const b1 = getDominantBone(i1);
             const b2 = getDominantBone(i2);
@@ -373,7 +456,11 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
                 const n0 = addVertex(i0);
                 const n1 = addVertex(i1);
                 const n2 = addVertex(i2);
-                newIndices.push(n0, n1, n2);
+
+                // If any vertex was clipped (returns -1), drop the triangle
+                if (n0 !== -1 && n1 !== -1 && n2 !== -1) {
+                    newIndices.push(n0, n1, n2);
+                }
             }
         }
     }
@@ -382,6 +469,7 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
 
     // 3. Create Mesh
     const mesh = new BABYLON.Mesh(name, scene);
+
     const vertexData = new BABYLON.VertexData();
     vertexData.positions = newPositions;
     vertexData.indices = newIndices;
@@ -414,12 +502,8 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, exclud
     mesh.numBoneInfluencers = 4;
     mesh.refreshBoundingInfo();
 
-    // Material
-    const mat = new BABYLON.StandardMaterial(name + "_mat", scene);
-    mat.diffuseColor = BABYLON.Color3.FromHexString(colorHex);
-    mat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
-    mat.backFaceCulling = false; // Show inside of shirt
-    mesh.material = mat;
+    // Material (Uses new PBR Helper)
+    mesh.material = createMaterial(name + "_mat", colorHex, matType);
 
     mesh.parent = characterRoot;
 }
@@ -457,16 +541,16 @@ export function renderHumanoid(bodyParts) {
     // LeftUpLeg: 13, RightUpLeg: 16
 
     if (hasShirt) {
-        // Shirt: Cut Hands (8, 12)
-        createClothingMesh("cloth_shirt", [1, 2, 3], 1.2, shirtColor, [8, 12]);
+        // Shirt: Cloth
+        createClothingMesh("cloth_shirt", [1, 2, 3], 1.2, shirtColor, 'cloth', [8, 12]);
     }
     if (hasPants) {
-        // Pants: Cut Feet (15, 18). Seam fix ensures Hips+Legs connect.
-        createClothingMesh("cloth_pants", [4, 5, 6], 1.6, pantsColor, [15, 18]);
+        // Pants: Cloth (Full Length - Tucks into boots due to lower inflation)
+        createClothingMesh("cloth_pants", [4, 5, 6], 1.6, pantsColor, 'cloth', []);
     }
     if (hasBoots) {
-        // Boots: Keeps everything leg-related to ensure proper scaling with Thighs.
-        createClothingMesh("cloth_boots", [5, 6], 2.7, bootColor, []);
+        // Boots: Leather (Clipped at Knee Height ~45)
+        createClothingMesh("cloth_boots", [5, 6], 2.4, bootColor, 'leather', [], 45.0);
     }
 }
 
