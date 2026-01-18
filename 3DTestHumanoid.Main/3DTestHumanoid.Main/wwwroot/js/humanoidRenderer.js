@@ -728,6 +728,8 @@ export function renderHumanoid(bodyParts) {
             createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones);
         }
     });
+
+    renderFace(bodyParts);
 }
 
 export function downloadModel(filename) {
@@ -739,6 +741,192 @@ export function downloadModel(filename) {
         glb.downloadFiles();
     });
 }
+
+// --- FACE RENDERER (Humanoid V3 - Sculpted) ---
+export function renderFace(bodyParts) {
+    if (!scene || !skeletonProxy) return;
+
+    // Dispose old face parts
+    const oldRoot = scene.getTransformNodeByName("faceRoot");
+    if (oldRoot) oldRoot.dispose();
+    scene.meshes.filter(m => m.name.startsWith("face_")).forEach(m => m.dispose());
+
+    const headBone = skeletonProxy.bones[4];
+    if (!headBone) return;
+
+    const faceRoot = new BABYLON.TransformNode("faceRoot", scene);
+    faceRoot.attachToBone(headBone, scene.getMeshByName("customHumanoid"));
+
+    // Parse Parts
+    const eyePart = bodyParts.find(p => p.name === "Face_Eyes");
+    const nosePart = bodyParts.find(p => p.name === "Face_Nose");
+    const browPart = bodyParts.find(p => p.name === "Face_Eyebrows");
+    const earPart = bodyParts.find(p => p.name === "Face_Ears");
+    const hairPart = bodyParts.find(p => p.name.startsWith("Face_Hair_"));
+    const beardPart = bodyParts.find(p => p.name.startsWith("Face_Beard_"));
+
+    // --- 1. PROPORTIONAL EYES (Lowered & Sunken) ---
+    const eyeColorHex = eyePart ? eyePart.color : "#0000FF";
+    const eyeY = -11;
+    const eyeZ = 9.8; // Sunken deeper (was 11)
+
+    const createEye = (name, xPos) => {
+        const eyeGroup = new BABYLON.TransformNode(name + "_root", scene);
+        eyeGroup.parent = faceRoot;
+        eyeGroup.position = new BABYLON.Vector3(xPos, eyeY, eyeZ);
+
+        // Sclera
+        const sclera = BABYLON.MeshBuilder.CreateSphere(name + "_sclera", { diameter: 4.2 }, scene);
+        const scleraMat = new BABYLON.StandardMaterial(name + "_scleraMat", scene);
+        scleraMat.diffuseColor = new BABYLON.Color3(0.95, 0.95, 0.95);
+        sclera.material = scleraMat;
+        sclera.parent = eyeGroup;
+
+        // Iris
+        const iris = BABYLON.MeshBuilder.CreateSphere(name + "_iris", { diameter: 2.0 }, scene);
+        const irisMat = new BABYLON.StandardMaterial(name + "_irisMat", scene);
+        irisMat.diffuseColor = BABYLON.Color3.FromHexString(eyeColorHex);
+        iris.material = irisMat;
+        iris.parent = eyeGroup;
+        iris.position.z = 1.8;
+        iris.scaling.z = 0.5;
+
+        // Pupil
+        const pupil = BABYLON.MeshBuilder.CreateSphere(name + "_pupil", { diameter: 1.0 }, scene);
+        const pupilMat = new BABYLON.StandardMaterial(name + "_pupilMat", scene);
+        pupilMat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+        pupil.material = pupilMat;
+        pupil.parent = eyeGroup;
+        pupil.position.z = 2.0;
+        pupil.scaling.z = 0.5;
+    };
+
+    createEye("face_eyeL", -3.5);
+    createEye("face_eyeR", 3.5);
+
+    // --- 2. BROWS ---
+    if (browPart) {
+        const browColor = BABYLON.Color3.FromHexString(browPart.color);
+        const browMat = new BABYLON.StandardMaterial("browMat", scene);
+        browMat.diffuseColor = browColor;
+
+        const createBrow = (side, xStart) => {
+            const brow = BABYLON.MeshBuilder.CreateTube(`face_brow_${side}`, {
+                path: [
+                    new BABYLON.Vector3(xStart - (side === "L" ? 2 : -2), eyeY + 3.0, eyeZ + 0.5),
+                    new BABYLON.Vector3(xStart + (side === "L" ? 3 : -3), eyeY + 3.3, eyeZ)
+                ],
+                radius: 0.5,
+                cap: BABYLON.Mesh.CAP_ALL
+            }, scene);
+            brow.material = browMat;
+            brow.parent = faceRoot;
+        };
+        createBrow("L", -3.5);
+        createBrow("R", 3.5);
+    }
+
+    // --- 3. NOSE ---
+    const noseColorHex = nosePart ? nosePart.color : "#dcb899";
+    const noseMat = new BABYLON.StandardMaterial("noseMat", scene);
+    noseMat.diffuseColor = BABYLON.Color3.FromHexString(noseColorHex);
+
+    const nose = BABYLON.MeshBuilder.CreateSphere("face_nose", { diameterX: 3, diameterY: 4.5, diameterZ: 3.5 }, scene);
+    nose.material = noseMat;
+    nose.parent = faceRoot;
+    nose.position = new BABYLON.Vector3(0, -15, 13); // Adjusted Y to match eyes
+
+    // --- 4. EARS ---
+    if (earPart) {
+        const earMat = noseMat; // Same skin
+        const createEar = (xPos) => {
+            const ear = BABYLON.MeshBuilder.CreateTorus("face_ear", { diameter: 5, thickness: 1.5, tessellation: 20 }, scene);
+            ear.material = earMat;
+            ear.parent = faceRoot;
+            ear.position = new BABYLON.Vector3(xPos, -12, 1); // Side of head, aligned with nose bridge
+            // ear.rotation.y = Math.PI / 2; // This made them handle-like
+            ear.rotation.z = Math.PI / 2; // Vertical against head
+            ear.rotation.y = Math.PI / 8 * (xPos > 0 ? -1 : 1); // Slight flare back
+            ear.scaling.z = 0.6; // Flatten against head
+        };
+        createEar(-8.5);
+        createEar(8.5);
+    }
+
+    // --- 5. MOUTH ---
+    const mouth = BABYLON.MeshBuilder.CreateBox("face_mouth", { width: 4.5, height: 0.5, depth: 0.5 }, scene);
+    const mouthMat = new BABYLON.StandardMaterial("mouthMat", scene);
+    mouthMat.diffuseColor = new BABYLON.Color3(0.3, 0.15, 0.15);
+    mouth.material = mouthMat;
+    mouth.parent = faceRoot;
+    mouth.position = new BABYLON.Vector3(0, -20, 13);
+
+    // --- 6. HAIR ---
+    if (hairPart) {
+        const style = hairPart.name.replace("Face_Hair_", "");
+        const hairColor = BABYLON.Color3.FromHexString(hairPart.color);
+        const hairMat = new BABYLON.StandardMaterial("hairMat", scene);
+        hairMat.diffuseColor = hairColor;
+        hairMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); // Low shine
+
+        if (style === "Short") {
+            const hair = BABYLON.MeshBuilder.CreateSphere("face_hair", { diameterX: 23, diameterY: 23, diameterZ: 25, slice: 0.5 }, scene);
+            hair.material = hairMat;
+            hair.parent = faceRoot;
+            hair.position = new BABYLON.Vector3(0, 1, 1);
+            hair.rotation.x = Math.PI;
+        } else if (style === "Long") {
+            const hair = BABYLON.MeshBuilder.CreateSphere("face_hair_top", { diameter: 24, slice: 0.6 }, scene);
+            hair.material = hairMat;
+            hair.parent = faceRoot;
+            hair.position = new BABYLON.Vector3(0, 1, 0);
+            hair.rotation.x = Math.PI;
+
+            const hairBack = BABYLON.MeshBuilder.CreateBox("face_hair_back", { width: 22, height: 35, depth: 4 }, scene);
+            hairBack.material = hairMat;
+            hairBack.parent = faceRoot;
+            hairBack.position = new BABYLON.Vector3(0, -12, -8);
+        } else if (style === "Mohawk") {
+            // Replicating "Swoop" style from image? 
+            // Let's stick to Mohawk but make it more volume-based
+            const hair = BABYLON.MeshBuilder.CreateTube("face_hair", {
+                path: [
+                    new BABYLON.Vector3(0, 10, 8),
+                    new BABYLON.Vector3(0, 14, 0),
+                    new BABYLON.Vector3(0, 8, -8)
+                ],
+                radius: 3,
+                cap: BABYLON.Mesh.CAP_ROUND
+            }, scene);
+            hair.material = hairMat;
+            hair.parent = faceRoot;
+        }
+    }
+
+    // --- 7. BEARD ---
+    if (beardPart) {
+        const style = beardPart.name.replace("Face_Beard_", "");
+        const beardColor = BABYLON.Color3.FromHexString(beardPart.color);
+        const beardMat = new BABYLON.StandardMaterial("beardMat", scene);
+        beardMat.diffuseColor = beardColor;
+
+        if (style === "Goatee") {
+            const beard = BABYLON.MeshBuilder.CreateCylinder("face_beard", { height: 6, diameterTop: 4, diameterBottom: 1 }, scene);
+            beard.material = beardMat;
+            beard.parent = faceRoot;
+            beard.position = new BABYLON.Vector3(0, -22, 14);
+            beard.rotation.x = Math.PI / 1.5;
+        } else if (style === "Full") {
+            const beard = BABYLON.MeshBuilder.CreateTorus("face_beard", { diameter: 17, thickness: 4, tessellation: 24 }, scene);
+            beard.material = beardMat;
+            beard.parent = faceRoot;
+            beard.position = new BABYLON.Vector3(0, -19, 7);
+            beard.scaling.y = 1.4;
+            beard.rotation.x = Math.PI / 6;
+        }
+    }
+}
+
 
 export function loadGlbModel(data) {
     if (!scene) return;

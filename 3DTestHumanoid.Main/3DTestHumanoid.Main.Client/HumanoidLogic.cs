@@ -31,6 +31,14 @@ public class HumanoidRecipe
     public string FeetSlot { get; set; } = "None";  // None, Boots, PlateBoots
     public string HandsSlot { get; set; } = "None";  // None, LeatherGloves, PlateGauntlets
 
+    // Facial Features
+    public string HairStyle { get; set; } = "None"; // None, Short, Long, Mohawk
+    public string BeardStyle { get; set; } = "None"; // None, Goatee, Full
+    public string EyeColor { get; set; } = "#0000FF"; // Blue
+    public string EyebrowColor { get; set; } = "#2C2C2C"; // Match Hair default
+    public string HairColor { get; set; } = "#2C2C2C"; // Black/Dark Grey
+    public bool HasEars { get; set; } = true; // Default Ears On
+
     // Arsenal
     public bool HasSword { get; set; } = false;
     public bool HasShield { get; set; } = false;
@@ -68,6 +76,28 @@ public static class HumanoidSolver
     {
         var parts = new List<BodyPartDto>();
 
+        // --- FACE (Potato Head) ---
+        // Always add Eyes (Color driven)
+        parts.Add(new BodyPartDto { Name = "Face_Eyes", Color = recipe.EyeColor });
+        parts.Add(new BodyPartDto { Name = "Face_Nose", Color = recipe.SkinColor }); // Matches Skin
+        parts.Add(new BodyPartDto { Name = "Face_Mouth", Color = "#000000" });
+        parts.Add(new BodyPartDto { Name = "Face_Eyebrows", Color = recipe.EyebrowColor });
+
+        if (recipe.HasEars)
+        {
+             parts.Add(new BodyPartDto { Name = "Face_Ears", Color = recipe.SkinColor });
+        }
+
+        if (!string.Equals(recipe.HairStyle, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             parts.Add(new BodyPartDto { Name = $"Face_Hair_{recipe.HairStyle}", Color = recipe.HairColor });
+        }
+
+        if (!string.Equals(recipe.BeardStyle, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             parts.Add(new BodyPartDto { Name = $"Face_Beard_{recipe.BeardStyle}", Color = recipe.HairColor });
+        }
+        
         // We only pass flags to the renderer now. 
         // The Geometry is handled by Mesh Inflation in JS (Option B).
 

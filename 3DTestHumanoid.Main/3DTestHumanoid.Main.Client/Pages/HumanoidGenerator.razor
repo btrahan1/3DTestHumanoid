@@ -53,134 +53,192 @@
 
             <hr />
 
+            <!-- FACIAL FEATURES -->
+            <!-- FACIAL FEATURES -->
+            <details open class="mb-3">
+                <summary class="h5">Face</summary>
+                <div class="mt-2">
+                    <div class="row g-2 mb-3">
+                         <div class="col-6">
+                            <label class="form-label x-small">Hair</label>
+                            <select class="form-select form-select-sm" @bind="recipe.HairStyle" @bind:after="Render">
+                                <option value="None">None</option>
+                                <option value="Short">Short</option>
+                                <option value="Long">Long</option>
+                                <option value="Mohawk">Mohawk</option>
+                            </select>
+                         </div>
+                         <div class="col-6">
+                            <label class="form-label x-small">Beard</label>
+                            <select class="form-select form-select-sm" @bind="recipe.BeardStyle" @bind:after="Render">
+                                <option value="None">None</option>
+                                <option value="Goatee">Goatee</option>
+                                <option value="Full">Full</option>
+                            </select>
+                         </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                         <div class="col-6">
+                            <label class="form-label x-small">Hair Color</label>
+                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.HairColor" @bind:after="Render" />
+                         </div>
+                         <div class="col-6">
+                            <label class="form-label x-small">Eye Color</label>
+                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyeColor" @bind:after="Render" />
+                         </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                         <div class="col-6">
+                            <label class="form-label x-small">Eyebrow Color</label>
+                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyebrowColor" @bind:after="Render" />
+                         </div>
+                         <div class="col-6 d-flex align-items-end">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="chkEars" @bind="recipe.HasEars" @bind:after="Render">
+                                <label class="form-check-label x-small" for="chkEars">Has Ears</label>
+                            </div>
+                         </div>
+                    </div>
+                </div>
+            </details>
+
+            <hr />
+
             <!-- APPEARANCE SECTION -->
-            <h5 class="mb-3">Equipment</h5>
+            <!-- APPEARANCE SECTION -->
+            <details class="mb-3">
+                <summary class="h5">Equipment</summary>
+                <div class="mt-2">
+                    <div class="mb-3">
+                        <label class="form-label small">Skin Tone</label>
+                        <input type="color" class="form-control form-control-color w-100"
+                               @bind="recipe.SkinColor" @bind:event="oninput" @onchange="Render" />
+                    </div>
 
-            <div class="mb-3">
-                <label class="form-label small">Skin Tone</label>
-                <input type="color" class="form-control form-control-color w-100"
-                       @bind="recipe.SkinColor" @bind:event="oninput" @onchange="Render" />
-            </div>
-
-            <!-- ARMOR SLOTS -->
-            <h5 class="mb-2">Armor</h5>
-            <div class="mb-2">
-                <label class="form-label x-small">Head</label>
-                <select class="form-select form-select-sm" @bind="recipe.HeadSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="ClothHood">Cloth Hood</option>
-                    <option value="LeatherHelm">Leather Helm</option>
-                    <option value="ChainHood">Chain Hood</option>
-                    <option value="PlateHelm">Plate Helm</option>
-                </select>
-            </div>
-            <div class="mb-2">
-                 <label class="form-label x-small">Shoulders</label>
-                <select class="form-select form-select-sm" @bind="recipe.ShouldersSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="ClothPauldrons">Cloth Mantle</option>
-                    <option value="LeatherPauldrons">Leather Pauldrons</option>
-                    <option value="ChainPauldrons">Chain Mantle</option>
-                    <option value="PlatePauldrons">Plate Pauldrons</option>
-                </select>
-            </div>
-            <div class="mb-2">
-                 <label class="form-label x-small">Chest</label>
-                <select class="form-select form-select-sm" @bind="recipe.TorsoSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="Shirt">Shirt (Cloth)</option>
-                    <option value="LeatherVest">Leather Vest</option>
-                    <option value="Chainmail">Chainmail</option>
-                    <option value="PlateArmor">Plate Armor</option>
-                </select>
-            </div>
-             <div class="mb-2">
-                 <label class="form-label x-small">Arms</label>
-                <select class="form-select form-select-sm" @bind="recipe.ArmsSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="ClothSleeves">Cloth Sleeves</option>
-                    <option value="LeatherBracers">Leather Arms</option>
-                    <option value="ChainSleeves">Chain Sleeves</option>
-                    <option value="PlateVambraces">Plate Vambraces</option>
-                </select>
-            </div>
-             <div class="mb-2">
-                 <label class="form-label x-small">Hands</label>
-                <select class="form-select form-select-sm" @bind="recipe.HandsSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="ClothGloves">Cloth Gloves</option>
-                    <option value="LeatherGloves">Leather Gloves</option>
-                    <option value="ChainGloves">Chain Gloves</option>
-                    <option value="PlateGauntlets">Plate Gauntlets</option>
-                </select>
-            </div>
-            <div class="mb-2">
-                 <label class="form-label x-small">Legs</label>
-                <select class="form-select form-select-sm" @bind="recipe.LegsSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="Pants">Pants (Cloth)</option>
-                    <option value="LeatherChaps">Leather Chaps</option>
-                    <option value="ChainLegs">Chain Legs</option>
-                    <option value="PlateGreaves">Plate Greaves</option>
-                </select>
-            </div>
-            <div class="mb-2">
-                 <label class="form-label x-small">Feet</label>
-                <select class="form-select form-select-sm" @bind="recipe.FeetSlot" @bind:after="Render">
-                    <option value="None">None</option>
-                    <option value="ClothShoes">Cloth Shoes</option>
-                    <option value="Boots">Boots (Leather)</option>
-                    <option value="ChainBoots">Chain Boots</option>
-                    <option value="PlateBoots">Plate Boots</option>
-                </select>
-            </div>
+                    <!-- ARMOR SLOTS -->
+                    <h6 class="mb-2 text-muted x-small">Armor</h6>
+                    <div class="mb-2">
+                        <label class="form-label x-small">Head</label>
+                        <select class="form-select form-select-sm" @bind="recipe.HeadSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="ClothHood">Cloth Hood</option>
+                            <option value="LeatherHelm">Leather Helm</option>
+                            <option value="ChainHood">Chain Hood</option>
+                            <option value="PlateHelm">Plate Helm</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                         <label class="form-label x-small">Shoulders</label>
+                        <select class="form-select form-select-sm" @bind="recipe.ShouldersSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="ClothPauldrons">Cloth Mantle</option>
+                            <option value="LeatherPauldrons">Leather Pauldrons</option>
+                            <option value="ChainPauldrons">Chain Mantle</option>
+                            <option value="PlatePauldrons">Plate Pauldrons</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                         <label class="form-label x-small">Chest</label>
+                        <select class="form-select form-select-sm" @bind="recipe.TorsoSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="Shirt">Shirt (Cloth)</option>
+                            <option value="LeatherVest">Leather Vest</option>
+                            <option value="Chainmail">Chainmail</option>
+                            <option value="PlateArmor">Plate Armor</option>
+                        </select>
+                    </div>
+                     <div class="mb-2">
+                         <label class="form-label x-small">Arms</label>
+                        <select class="form-select form-select-sm" @bind="recipe.ArmsSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="ClothSleeves">Cloth Sleeves</option>
+                            <option value="LeatherBracers">Leather Arms</option>
+                            <option value="ChainSleeves">Chain Sleeves</option>
+                            <option value="PlateVambraces">Plate Vambraces</option>
+                        </select>
+                    </div>
+                     <div class="mb-2">
+                         <label class="form-label x-small">Hands</label>
+                        <select class="form-select form-select-sm" @bind="recipe.HandsSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="ClothGloves">Cloth Gloves</option>
+                            <option value="LeatherGloves">Leather Gloves</option>
+                            <option value="ChainGloves">Chain Gloves</option>
+                            <option value="PlateGauntlets">Plate Gauntlets</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                         <label class="form-label x-small">Legs</label>
+                        <select class="form-select form-select-sm" @bind="recipe.LegsSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="Pants">Pants (Cloth)</option>
+                            <option value="LeatherChaps">Leather Chaps</option>
+                            <option value="ChainLegs">Chain Legs</option>
+                            <option value="PlateGreaves">Plate Greaves</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                         <label class="form-label x-small">Feet</label>
+                        <select class="form-select form-select-sm" @bind="recipe.FeetSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="ClothShoes">Cloth Shoes</option>
+                            <option value="Boots">Boots (Leather)</option>
+                            <option value="ChainBoots">Chain Boots</option>
+                            <option value="PlateBoots">Plate Boots</option>
+                        </select>
+                    </div>
+                </div>
+            </details>
 
             <!-- MORPHOLOGY SECTION -->
-            <h5 class="mb-3">Morphology</h5>
-            
-            <div class="mb-3">
-                <label class="form-label small">Body Type</label>
-                <select class="form-select" @bind="recipe.BodyType" @bind:after="Render">
-                    <option value="Average">Average</option>
-                    <option value="Heavy">Heavy (Tank)</option>
-                    <option value="Lean">Lean (Speed)</option>
-                </select>
-            </div>
-            
-            <div class="mb-3">
-                <label class="form-label small">Height Scale: <strong>@recipe.HeightScale.ToString("0.0")x</strong></label>
-                <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
-                       @bind="recipe.HeightScale" @bind:event="oninput" @onchange="Render" />
-            </div>
+            <details class="mb-3">
+                <summary class="h5">Morphology</summary>
+                <div class="mt-2">
+                    <div class="mb-3">
+                        <label class="form-label small">Body Type</label>
+                        <select class="form-select" @bind="recipe.BodyType" @bind:after="Render">
+                            <option value="Average">Average</option>
+                            <option value="Heavy">Heavy (Tank)</option>
+                            <option value="Lean">Lean (Speed)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Height Scale: <strong>@recipe.HeightScale.ToString("0.0")x</strong></label>
+                        <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
+                               @bind="recipe.HeightScale" @bind:event="oninput" @onchange="Render" />
+                    </div>
 
-            <div class="mb-3">
-                <label class="form-label small">Width/Weight: <strong>@recipe.WidthScale.ToString("0.0")x</strong></label>
-                <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
-                       @bind="recipe.WidthScale" @bind:event="oninput" @onchange="Render" />
-            </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Width/Weight: <strong>@recipe.WidthScale.ToString("0.0")x</strong></label>
+                        <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
+                               @bind="recipe.WidthScale" @bind:event="oninput" @onchange="Render" />
+                    </div>
 
-            <div class="row">
-                <div class="col-6 mb-2">
-                    <label class="form-label x-small">Shoulders</label>
-                    <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
-                           @bind="recipe.ShoulderWidth" @bind:event="oninput" @onchange="Render" />
+                    <div class="row">
+                        <div class="col-6 mb-2">
+                            <label class="form-label x-small">Shoulders</label>
+                            <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
+                                   @bind="recipe.ShoulderWidth" @bind:event="oninput" @onchange="Render" />
+                        </div>
+                        <div class="col-6 mb-2">
+                             <label class="form-label x-small">Head</label>
+                            <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
+                                   @bind="recipe.HeadSize" @bind:event="oninput" @onchange="Render" />
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="form-label x-small">Arms</label>
+                            <input type="range" class="form-range" min="0.8" max="1.5" step="0.05"
+                                   @bind="recipe.ArmLength" @bind:event="oninput" @onchange="Render" />
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="form-label x-small">Legs</label>
+                            <input type="range" class="form-range" min="0.8" max="1.5" step="0.05"
+                                   @bind="recipe.LegLength" @bind:event="oninput" @onchange="Render" />
+                        </div>
+                    </div>
                 </div>
-                <div class="col-6 mb-2">
-                     <label class="form-label x-small">Head</label>
-                    <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
-                           @bind="recipe.HeadSize" @bind:event="oninput" @onchange="Render" />
-                </div>
-                <div class="col-6 mb-2">
-                    <label class="form-label x-small">Arms</label>
-                    <input type="range" class="form-range" min="0.8" max="1.5" step="0.05"
-                           @bind="recipe.ArmLength" @bind:event="oninput" @onchange="Render" />
-                </div>
-                <div class="col-6 mb-2">
-                    <label class="form-label x-small">Legs</label>
-                    <input type="range" class="form-range" min="0.8" max="1.5" step="0.05"
-                           @bind="recipe.LegLength" @bind:event="oninput" @onchange="Render" />
-                </div>
-            </div>
+            </details>
             
             <div class="form-check mb-4">
                 <input class="form-check-input" type="checkbox" @bind="xRayMode" @onclick="ToggleXRay">
@@ -188,27 +246,31 @@
             </div>
 
             <!-- ARSENAL -->
-            <h5 class="mt-4 mb-2">Arsenal</h5>
-            <div class="row mb-3">
-                 <div class="col-4">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="chkSword" @bind="recipe.HasSword" @bind:after="Render">
-                        <label class="form-check-label" for="chkSword">Sword</label>
+            <details class="mb-3">
+                <summary class="h5 mt-4 mb-2">Arsenal</summary>
+                <div class="mt-2">
+                    <div class="row mb-3">
+                         <div class="col-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="chkSword" @bind="recipe.HasSword" @bind:after="Render">
+                                <label class="form-check-label" for="chkSword">Sword</label>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="chkShield" @bind="recipe.HasShield" @bind:after="Render">
+                                <label class="form-check-label" for="chkShield">Shield</label>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="chkSpear" @bind="recipe.HasSpear" @bind:after="Render">
+                                <label class="form-check-label" for="chkSpear">Spear</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="col-4">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="chkShield" @bind="recipe.HasShield" @bind:after="Render">
-                        <label class="form-check-label" for="chkShield">Shield</label>
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="chkSpear" @bind="recipe.HasSpear" @bind:after="Render">
-                        <label class="form-check-label" for="chkSpear">Spear</label>
-                    </div>
-                </div>
-            </div>
+            </details>
 
             <div style="flex-grow: 1;"></div>
             
