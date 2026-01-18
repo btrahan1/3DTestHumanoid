@@ -10,6 +10,13 @@ public class HumanoidRecipe
     // Morphology (FBX Transforms)
     public float HeightScale { get; set; } = 1.0f;
     public float WidthScale { get; set; } = 1.0f;
+    
+    // Detailed Genes
+    public float ShoulderWidth { get; set; } = 1.0f; // Clavicle X
+    public float LegLength { get; set; } = 1.0f;     // UpLeg Y
+    public float ArmLength { get; set; } = 1.0f;     // UpArm Y
+    public float HeadSize { get; set; } = 1.0f;      // Head Uniform
+
     public string SkinColor { get; set; } = "#D2B48C";
 
     // Clothing Layer

@@ -232,7 +232,54 @@ export function getCharacterPosition() {
 
 // ------ CLOTHING GENERATION ------
 
-function createClothingMesh(name, targetRegions, inflateAmount, color, excludeBones = []) {
+// --- MORPHOLOGY ---
+// --- MORPHOLOGY ---
+export function setMorphology(shoulder, leg, arm, head) {
+    const allSkeletons = [skeletonProxy, ...clothingSkeletons].filter(s => s);
+    if (!allSkeletons.length) return;
+
+    allSkeletons.forEach(skel => {
+        // Helper
+        const setY = (idx, val) => {
+            if (skel.bones[idx]) skel.bones[idx].scaling.y = val;
+        };
+        const setX = (idx, val) => {
+            if (skel.bones[idx]) skel.bones[idx].scaling.x = val;
+        };
+        const setUniform = (idx, val) => {
+            if (skel.bones[idx]) skel.bones[idx].scaling = new BABYLON.Vector3(val, val, val);
+        };
+
+        // LEGS: Scale Thighs (13, 16) and Shins/Calves (14, 17)
+        setY(13, leg); // L UpLeg
+        setY(16, leg); // R UpLeg
+        setY(14, leg); // L Leg
+        setY(17, leg); // R Leg
+
+        // ARMS: Scale UpArms (6, 10) and ForeArms (7, 11)
+        setY(6, arm);  // L UpArm
+        setY(10, arm); // R UpArm
+        setY(7, arm);  // L ForeArm
+        setY(11, arm); // R ForeArm
+
+        // HEAD: Scale Uniform (Index 4)
+        setUniform(4, head);
+
+        // SHOULDERS: Clavicles (Index 5=L, 9=R)
+        // Scale X to widen shoulders (pushes arms out)
+        if (skel.bones[5]) skel.bones[5].scaling.x = shoulder;
+        if (skel.bones[9]) skel.bones[9].scaling.x = shoulder;
+    });
+
+    // ROOT HEIGHT CORRECTION
+    const HEIGHT_FACTOR = 90.0;
+    if (characterRoot) {
+        characterRoot.position.y = (leg - 1.0) * HEIGHT_FACTOR;
+    }
+}
+
+// --- CLOTHING MESH GENERATOR ---
+function createClothingMesh(name, targetRegions, inflateAmount, colorHex, excludeBones = []) {
     console.log(`createClothingMesh: Called for ${name}`);
 
     if (!window.humanoidData || !scene) return;
@@ -369,9 +416,9 @@ function createClothingMesh(name, targetRegions, inflateAmount, color, excludeBo
 
     // Material
     const mat = new BABYLON.StandardMaterial(name + "_mat", scene);
-    mat.diffuseColor = BABYLON.Color3.FromHexString(color);
+    mat.diffuseColor = BABYLON.Color3.FromHexString(colorHex);
     mat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
-    mat.backFaceCulling = false;
+    mat.backFaceCulling = false; // Show inside of shirt
     mesh.material = mat;
 
     mesh.parent = characterRoot;
@@ -418,8 +465,8 @@ export function renderHumanoid(bodyParts) {
         createClothingMesh("cloth_pants", [4, 5, 6], 1.6, pantsColor, [15, 18]);
     }
     if (hasBoots) {
-        // Boots: Cut Thighs (13, 16). Keeps Knees/LowerLegs (14, 17) and Feet (15, 18).
-        createClothingMesh("cloth_boots", [5, 6], 2.8, bootColor, [13, 16]);
+        // Boots: Keeps everything leg-related to ensure proper scaling with Thighs.
+        createClothingMesh("cloth_boots", [5, 6], 2.7, bootColor, []);
     }
 }
 
