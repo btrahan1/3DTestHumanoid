@@ -117,24 +117,16 @@
             </div>
 
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="recipe.HasHelmet" @onclick="Render">
-                <label class="form-check-label">Helmet</label>
+                <input class="form-check-input" type="checkbox" checked="@recipe.HasShirt" @onchange="@(async e => { recipe.HasShirt = (bool)(e.Value ?? false); await Render(); })">
+                <label class="form-check-label">Shirt</label>
             </div>
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="recipe.HasChestArmor" @onclick="Render">
-                <label class="form-check-label">Breastplate</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="recipe.HasShoulderPads" @onclick="Render">
-                <label class="form-check-label">Shoulder Pads</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="recipe.HasArmArmor" @onclick="Render">
-                <label class="form-check-label">Bracers</label>
+                <input class="form-check-input" type="checkbox" checked="@recipe.HasPants" @onchange="@(async e => { recipe.HasPants = (bool)(e.Value ?? false); await Render(); })">
+                <label class="form-check-label">Pants</label>
             </div>
             <div class="form-check mb-4">
-                <input class="form-check-input" type="checkbox" @bind="recipe.HasLegArmor" @onclick="Render">
-                <label class="form-check-label">Greaves</label>
+                <input class="form-check-input" type="checkbox" checked="@recipe.HasBoots" @onchange="@(async e => { recipe.HasBoots = (bool)(e.Value ?? false); await Render(); })">
+                <label class="form-check-label">Boots</label>
             </div>
 
             <!-- Spacer to push download to bottom -->
@@ -247,7 +239,11 @@
         recipe.LegLengthMult = 1.0f;
         recipe.TorsoHunch = 0.0f;
         recipe.NeckLengthMult = 1.0f;
+        recipe.NeckLengthMult = 1.0f;
         recipe.SkinColor = "#D2B48C"; // Human tan
+        recipe.HasShirt = false;
+        recipe.HasPants = false;
+        recipe.HasBoots = false;
 
         switch (race)
         {

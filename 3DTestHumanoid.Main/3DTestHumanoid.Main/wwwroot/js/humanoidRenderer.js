@@ -1,9 +1,10 @@
-﻿console.log("DEBUG: VERSION PROCEDURAL RIG LOADED");
+﻿console.log("DEBUG: VERSION MANUAL SKELETON REBUILD LOADED");
 
 let engine = null;
 let scene = null;
 let characterRoot = null;
 let skeletonProxy = null;
+let clothingSkeletons = []; // Store cloned skeletons for animation
 let inputMap = {};
 
 export function initCanvas(canvasId) {
@@ -57,54 +58,49 @@ export function initCanvas(canvasId) {
 let animState = "idle";
 
 function updateAnimation() {
-    if (!skeletonProxy || !skeletonProxy.bones.length) return;
+    // UPDATED: Animate specific skeletons AND the proxy
+    const allSkeletons = [skeletonProxy, ...clothingSkeletons].filter(s => s && s.bones.length);
+    if (!allSkeletons.length) return;
 
-    const time = performance.now() * 0.005; // Time factor for speed
-    const bones = skeletonProxy.bones;
-
-    // Bone Indices (Updated for High-Fidelity Rig):
-    // 0:Hips, 1:Spine, 2:Spine1, 3:Neck, 4:Head
-    // 5:LShoulder, 6:LArm, 7:LForeArm, 8:LHand
-    // 9:RShoulder, 10:RArm, 11:RForeArm, 12:RHand
-    // 13:LUpLeg, 14:LLeg, 15:LFoot
-    // 16:RUpLeg, 17:RLeg, 18:RFoot
+    const time = performance.now() * 0.005;
 
     if (animState === "walk") {
         const walkSpeed = 1.2;
         const cycle = time * walkSpeed;
 
-        // Legs
-        bones[13].rotation = new BABYLON.Vector3(Math.sin(cycle) * 0.4, 0, 0); // LUpLeg
-        bones[14].rotation = new BABYLON.Vector3(Math.max(0, Math.sin(cycle - 1)) * 0.4, 0, 0); // LLeg (Knee)
+        allSkeletons.forEach(skel => {
+            const bones = skel.bones;
+            // Legs
+            bones[13].rotation = new BABYLON.Vector3(Math.sin(cycle) * 0.4, 0, 0); // LUpLeg
+            bones[14].rotation = new BABYLON.Vector3(Math.max(0, Math.sin(cycle - 1)) * 0.4, 0, 0); // LLeg (Knee)
 
-        bones[16].rotation = new BABYLON.Vector3(Math.sin(cycle + Math.PI) * 0.4, 0, 0); // RUpLeg
-        bones[17].rotation = new BABYLON.Vector3(Math.max(0, Math.sin(cycle + Math.PI - 1)) * 0.4, 0, 0); // RLeg (Knee)
+            bones[16].rotation = new BABYLON.Vector3(Math.sin(cycle + Math.PI) * 0.4, 0, 0); // RUpLeg
+            bones[17].rotation = new BABYLON.Vector3(Math.max(0, Math.sin(cycle + Math.PI - 1)) * 0.4, 0, 0); // RLeg (Knee)
 
-        // Arms (Hanging down, swinging forward/back)
-        const armBaseZ = 1.45;
-        bones[6].rotation = new BABYLON.Vector3(Math.sin(cycle + Math.PI) * 0.25, 0, -armBaseZ); // LArm
-        bones[10].rotation = new BABYLON.Vector3(Math.sin(cycle) * 0.25, 0, armBaseZ); // RArm
+            // Arms 
+            const armBaseZ = 1.45;
+            bones[6].rotation = new BABYLON.Vector3(Math.sin(cycle + Math.PI) * 0.25, 0, -armBaseZ); // LArm
+            bones[10].rotation = new BABYLON.Vector3(Math.sin(cycle) * 0.25, 0, armBaseZ); // RArm
 
-        // Stable Spine & Hips
-        bones[1].rotation = new BABYLON.Vector3(0, Math.sin(cycle) * 0.03, 0);
-        bones[0].rotation = new BABYLON.Vector3(0, Math.sin(cycle) * 0.05, 0);
+            // Spine
+            bones[1].rotation = new BABYLON.Vector3(0, Math.sin(cycle) * 0.03, 0);
+            bones[0].rotation = new BABYLON.Vector3(0, Math.sin(cycle) * 0.05, 0);
+        });
 
     } else {
-        // Idle (Slow breathing)
+        // Idle
         const idleSpeed = 0.4;
         const cycle = time * idleSpeed;
 
-        // Reset to default pose
-        bones.forEach(b => b.rotation = BABYLON.Vector3.Zero());
+        allSkeletons.forEach(skel => {
+            const bones = skel.bones;
+            bones.forEach(b => b.rotation = BABYLON.Vector3.Zero());
 
-        // Arms down
-        const armBaseZ = 1.5;
-        // Joint 6 is LArm, Joint 10 is RArm
-        bones[6].rotation = new BABYLON.Vector3(0, 0, -armBaseZ);
-        bones[10].rotation = new BABYLON.Vector3(0, 0, armBaseZ);
-
-        // Very subtle breathing
-        bones[1].rotation = new BABYLON.Vector3(Math.sin(cycle) * 0.02, 0, 0);
+            const armBaseZ = 1.5;
+            bones[6].rotation = new BABYLON.Vector3(0, 0, -armBaseZ);
+            bones[10].rotation = new BABYLON.Vector3(0, 0, armBaseZ);
+            bones[1].rotation = new BABYLON.Vector3(Math.sin(cycle) * 0.02, 0, 0);
+        });
     }
 }
 
@@ -134,6 +130,9 @@ function updateMovement() {
     animState = isMoving ? "walk" : "idle";
 }
 
+// Global Data Store
+window.humanoidData = null;
+
 export async function loadHumanoidFbx() {
     if (!scene || !characterRoot) return;
     console.log("Loading Procedurally Rigged Humanoid...");
@@ -142,13 +141,15 @@ export async function loadHumanoidFbx() {
         const response = await fetch('./humanoid_data.json');
         if (!response.ok) throw new Error("Failed to load humanoid_data.json");
         const data = await response.json();
-
-        console.log(`Mesh Data: ${data.positions.length / 3} verts, ${data.indices.length / 3} triangles, ${data.bones.length} bones`);
+        window.humanoidData = data;
 
         // Dispose existing
         const oldMesh = scene.getMeshByName("customHumanoid");
         if (oldMesh) oldMesh.dispose();
         if (skeletonProxy) skeletonProxy.dispose();
+        clothingSkeletons.forEach(s => s.dispose());
+        clothingSkeletons = [];
+        scene.meshes.filter(m => m.name.startsWith("cloth_")).forEach(m => m.dispose());
 
         // 1. Create Skeleton
         skeletonProxy = new BABYLON.Skeleton("proceduralSkeleton", "skel-01", scene);
@@ -156,7 +157,6 @@ export async function loadHumanoidFbx() {
 
         data.bones.forEach((b, i) => {
             const parent = b.parentIndex !== -1 ? babylonBones[b.parentIndex] : null;
-            // Use Matrix.Compose to handle rotation if we ever add it to JSON
             const matrix = BABYLON.Matrix.Translation(b.pos[0], b.pos[1], b.pos[2]);
             const bone = new BABYLON.Bone(b.name, skeletonProxy, parent, matrix);
             babylonBones.push(bone);
@@ -183,7 +183,7 @@ export async function loadHumanoidFbx() {
 
         // Material
         const mat = new BABYLON.StandardMaterial("humanMat", scene);
-        mat.diffuseColor = new BABYLON.Color3(1.0, 0.8, 0.7); // Skin tone
+        mat.diffuseColor = new BABYLON.Color3(1.0, 0.8, 0.7);
         mat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
         mat.backFaceCulling = false;
         mesh.material = mat;
@@ -192,7 +192,7 @@ export async function loadHumanoidFbx() {
         mesh.scaling = new BABYLON.Vector3(1, 1, 1);
         mesh.position.y = 0;
 
-        // 3. Animation Test (Moved to updateAnimation loop)
+        // 3. Animation Test
         scene.registerBeforeRender(() => {
             updateMovement();
             updateAnimation();
@@ -207,7 +207,7 @@ export async function loadHumanoidFbx() {
     }
 }
 
-// Stubs for UI controls to prevent errors
+// Stubs for UI controls
 export function setAnimationState(state) { animState = state; }
 export function setBodyScale(height, width) {
     if (!characterRoot) return;
@@ -215,21 +215,210 @@ export function setBodyScale(height, width) {
     characterRoot.scaling.x = width;
     characterRoot.scaling.z = width;
 }
-
 export function setXRayMode(enabled) {
     const mesh = scene.getMeshByName("customHumanoid");
     if (!mesh) return;
     mesh.material.alpha = enabled ? 0.5 : 1.0;
 }
-
 export function setSkinColor(hexColor) {
     const mesh = scene.getMeshByName("customHumanoid");
     if (!mesh) return;
     mesh.material.diffuseColor = BABYLON.Color3.FromHexString(hexColor);
 }
-
 export function isMoving() { return animState === "walk"; }
 export function getCharacterPosition() {
     return { x: characterRoot.position.x, y: characterRoot.position.y, z: characterRoot.position.z };
 }
-export function renderHumanoid() { }
+
+// ------ CLOTHING GENERATION ------
+
+function createClothingMesh(name, targetRegions, inflateAmount, color, excludeBones = []) {
+    console.log(`createClothingMesh: Called for ${name}`);
+
+    if (!window.humanoidData || !scene) return;
+    const data = window.humanoidData;
+    const regionIds = data.regionIds;
+
+    // 1. Filter Vertices & Build New Index Map
+    const newPositions = [];
+    const newIndices = [];
+    const newMatricesIndices = [];
+    const newMatricesWeights = [];
+    const indexMap = new Map();
+
+    // Helper: Get Primary Bone Index for a vertex
+    const getDominantBone = (oldIdx) => {
+        // Just check the first bone index (usually the highest weight in sorted export, 
+        // but even if not, if it has ANY weight it's relevant). 
+        // Ideally we check the one with max weight.
+        let maxW = 0;
+        let mainB = -1;
+        for (let k = 0; k < 4; k++) {
+            if (data.matricesWeights[oldIdx * 4 + k] > maxW) {
+                maxW = data.matricesWeights[oldIdx * 4 + k];
+                mainB = data.matricesIndices[oldIdx * 4 + k];
+            }
+            // If weights are equal, prefer lower bone index (arbitrary tie-breaker)
+            else if (data.matricesWeights[oldIdx * 4 + k] === maxW && data.matricesIndices[oldIdx * 4 + k] < mainB) {
+                mainB = data.matricesIndices[oldIdx * 4 + k];
+            }
+        }
+        return mainB;
+    };
+
+    const addVertex = (oldIdx) => {
+        if (indexMap.has(oldIdx)) return indexMap.get(oldIdx);
+
+        const newIdx = newPositions.length / 3;
+
+        // Position + Inflation
+        const px = data.positions[oldIdx * 3];
+        const py = data.positions[oldIdx * 3 + 1];
+        const pz = data.positions[oldIdx * 3 + 2];
+
+        const baseMesh = scene.getMeshByName("customHumanoid");
+        let nx = 0, ny = 1, nz = 0;
+        if (baseMesh) {
+            const normals = baseMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+            if (normals) {
+                // FLIP NORMALS: FBX data is inverted, so we flip to point Outwards
+                nx = -normals[oldIdx * 3];
+                ny = -normals[oldIdx * 3 + 1];
+                nz = -normals[oldIdx * 3 + 2];
+            }
+        }
+
+        newPositions.push(px + nx * inflateAmount);
+        newPositions.push(py + ny * inflateAmount);
+        newPositions.push(pz + nz * inflateAmount);
+
+        // Weights (Clean Pass)
+        newMatricesIndices.push(data.matricesIndices[oldIdx * 4], data.matricesIndices[oldIdx * 4 + 1], data.matricesIndices[oldIdx * 4 + 2], data.matricesIndices[oldIdx * 4 + 3]);
+        newMatricesWeights.push(data.matricesWeights[oldIdx * 4], data.matricesWeights[oldIdx * 4 + 1], data.matricesWeights[oldIdx * 4 + 2], data.matricesWeights[oldIdx * 4 + 3]);
+
+        indexMap.set(oldIdx, newIdx);
+        return newIdx;
+    };
+
+    // 2. Build Triangles
+    for (let i = 0; i < data.indices.length; i += 3) {
+        const i0 = data.indices[i];
+        const i1 = data.indices[i + 1];
+        const i2 = data.indices[i + 2];
+
+        const r0 = regionIds[i0];
+        const r1 = regionIds[i1];
+        const r2 = regionIds[i2];
+
+        // REGION FILTER: "At least 2 vertices" (Fixes Seams/Groin Gap)
+        let matchCount = 0;
+        if (targetRegions.includes(r0)) matchCount++;
+        if (targetRegions.includes(r1)) matchCount++;
+        if (targetRegions.includes(r2)) matchCount++;
+
+        if (matchCount >= 2) {
+            // BONE EXCLUSION FILTER: Drop triangle if ANY vertex is dominated by an excluded bone
+            const b0 = getDominantBone(i0);
+            const b1 = getDominantBone(i1);
+            const b2 = getDominantBone(i2);
+
+            if (!excludeBones.includes(b0) && !excludeBones.includes(b1) && !excludeBones.includes(b2)) {
+                const n0 = addVertex(i0);
+                const n1 = addVertex(i1);
+                const n2 = addVertex(i2);
+                newIndices.push(n0, n1, n2);
+            }
+        }
+    }
+
+    if (newIndices.length === 0) return;
+
+    // 3. Create Mesh
+    const mesh = new BABYLON.Mesh(name, scene);
+    const vertexData = new BABYLON.VertexData();
+    vertexData.positions = newPositions;
+    vertexData.indices = newIndices;
+    vertexData.matricesIndices = new Float32Array(newMatricesIndices);
+    vertexData.matricesWeights = new Float32Array(newMatricesWeights);
+
+    // Normals
+    const calcNormals = [];
+    BABYLON.VertexData.ComputeNormals(newPositions, newIndices, calcNormals);
+    vertexData.normals = calcNormals;
+
+    vertexData.applyToMesh(mesh);
+
+    // CRITICAL FIX: Manually build a FRESH skeleton instead of cloning
+    // Cloning was corrupting Bone 0. Manual rebuild ensures clean state.
+    const newSkel = new BABYLON.Skeleton(name + "_skel", name + "_skel_id", scene);
+    const babylonBones = [];
+
+    data.bones.forEach((b, i) => {
+        const parent = b.parentIndex !== -1 ? babylonBones[b.parentIndex] : null;
+        const matrix = BABYLON.Matrix.Translation(b.pos[0], b.pos[1], b.pos[2]);
+        const bone = new BABYLON.Bone(b.name, newSkel, parent, matrix);
+        babylonBones.push(bone);
+    });
+
+    newSkel.returnToRest();
+    clothingSkeletons.push(newSkel);
+
+    mesh.skeleton = newSkel;
+    mesh.numBoneInfluencers = 4;
+    mesh.refreshBoundingInfo();
+
+    // Material
+    const mat = new BABYLON.StandardMaterial(name + "_mat", scene);
+    mat.diffuseColor = BABYLON.Color3.FromHexString(color);
+    mat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+    mat.backFaceCulling = false;
+    mesh.material = mat;
+
+    mesh.parent = characterRoot;
+}
+
+export function renderHumanoid(bodyParts) {
+    if (!scene || !characterRoot) return;
+
+    // Clean up old meshes AND skeletons
+    scene.meshes.filter(m => m.name.startsWith("cloth_")).forEach(m => m.dispose());
+    scene.meshes.filter(m => m.name.startsWith("proc_")).forEach(m => m.dispose());
+    scene.meshes.filter(m => m.name.includes("_debug")).forEach(m => m.dispose());
+
+    clothingSkeletons.forEach(s => s.dispose());
+    clothingSkeletons = [];
+
+    // Check flags
+    const hasShirt = bodyParts.some(p => p.name.includes("Shirt"));
+    const hasPants = bodyParts.some(p => p.name.includes("Pants"));
+    const hasBoots = bodyParts.some(p => p.name.includes("Boot"));
+
+    // Restore Body Defaults (remove debug x-ray/culling)
+    const body = scene.getMeshByName("customHumanoid");
+    if (body) {
+        body.material.alpha = 1.0;
+        body.material.backFaceCulling = false; // Keep false to act as double-sided
+    }
+
+    const shirtColor = bodyParts.find(p => p.name.includes("Shirt"))?.color || "#3B5998";
+    const pantsColor = bodyParts.find(p => p.name.includes("Pants"))?.color || "#3B5998";
+    const bootColor = bodyParts.find(p => p.name.includes("Boot"))?.color || "#3D2B1F";
+
+    // BONE IDs:
+    // LeftHand: 8, RightHand: 12
+    // LeftFoot: 15, RightFoot: 18
+    // LeftUpLeg: 13, RightUpLeg: 16
+
+    if (hasShirt) {
+        // Shirt: Cut Hands (8, 12)
+        createClothingMesh("cloth_shirt", [1, 2, 3], 1.2, shirtColor, [8, 12]);
+    }
+    if (hasPants) {
+        // Pants: Cut Feet (15, 18). Seam fix ensures Hips+Legs connect.
+        createClothingMesh("cloth_pants", [4, 5, 6], 1.6, pantsColor, [15, 18]);
+    }
+    if (hasBoots) {
+        // Boots: Cut Thighs (13, 16). Keeps Knees/LowerLegs (14, 17) and Feet (15, 18).
+        createClothingMesh("cloth_boots", [5, 6], 2.8, bootColor, [13, 16]);
+    }
+}

@@ -3,6 +3,23 @@ import json
 import re
 import math
 
+def get_region_id(bone_id):
+    # 0: Head (Neck, Head)
+    if bone_id in [3, 4]: return 0
+    # 1: Torso (Spine, Spine1, Shoulders)
+    if bone_id in [1, 2, 5, 9]: return 1
+    # 2: L_Arm (Arm, ForeArm, Hand)
+    if bone_id in [6, 7, 8]: return 2
+    # 3: R_Arm (Arm, ForeArm, Hand)
+    if bone_id in [10, 11, 12]: return 3
+    # 4: Hips/Thighs (Hips, UpLegs) - Pants Top
+    if bone_id in [0, 13, 16]: return 4
+    # 5: L_Leg (Leg, Foot) - Pants Bottom / Boots
+    if bone_id in [14, 15]: return 5
+    # 6: R_Leg (Leg, Foot) - Pants Bottom / Boots
+    if bone_id in [17, 18]: return 6
+    return -1
+
 def parse_fbx_to_json(fbx_path, json_path):
     print(f"Parsing FBX for High-Fidelity Rigging: {fbx_path}")
     
@@ -89,9 +106,10 @@ def parse_fbx_to_json(fbx_path, json_path):
         closest = (a[0] + t*ba[0], a[1] + t*ba[1], a[2] + t*ba[2])
         return math.sqrt((p[0]-closest[0])**2 + (p[1]-closest[1])**2 + (p[2]-closest[2])**2)
 
-    print("Calculating Low-Distortion Weights...")
+    print("Calculating Low-Distortion Weights & Regions...")
     m_indices = []
     m_weights = []
+    region_ids = []
     
     num_verts = len(vertices) // 3
     for v_idx in range(num_verts):
@@ -131,6 +149,16 @@ def parse_fbx_to_json(fbx_path, json_path):
             
         m_indices.extend(v_indices)
         m_weights.extend(v_weights)
+        
+        # Calculate Dominant Region
+        best_bone = -1
+        best_weight = -1.0
+        for b_id, w in p_weights: # Use p_weights (raw) for comparison
+            if w > best_weight:
+                best_weight = w
+                best_bone = b_id
+        
+        region_ids.append(get_region_id(best_bone))
 
     bone_data = []
     for j in joints:
@@ -152,7 +180,8 @@ def parse_fbx_to_json(fbx_path, json_path):
         "indices": indices,
         "bones": bone_data,
         "matricesIndices": m_indices,
-        "matricesWeights": m_weights
+        "matricesWeights": m_weights,
+        "regionIds": region_ids
     }
     
     with open(json_path, 'w') as f:
