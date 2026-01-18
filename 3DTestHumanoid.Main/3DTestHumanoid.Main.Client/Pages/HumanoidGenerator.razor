@@ -127,6 +127,29 @@
                 <label class="form-check-label">X-Ray Mode</label>
             </div>
 
+            <!-- ARSENAL -->
+            <h5 class="mt-4 mb-2">Arsenal</h5>
+            <div class="row mb-3">
+                 <div class="col-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkSword" @bind="recipe.HasSword" @bind:after="Render">
+                        <label class="form-check-label" for="chkSword">Sword</label>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkShield" @bind="recipe.HasShield" @bind:after="Render">
+                        <label class="form-check-label" for="chkShield">Shield</label>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="chkSpear" @bind="recipe.HasSpear" @bind:after="Render">
+                        <label class="form-check-label" for="chkSpear">Spear</label>
+                    </div>
+                </div>
+            </div>
+
             <div style="flex-grow: 1;"></div>
             
             <!-- MODEL ACTIONS -->

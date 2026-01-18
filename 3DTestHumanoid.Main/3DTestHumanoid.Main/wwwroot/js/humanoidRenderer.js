@@ -529,6 +529,95 @@ export function renderHumanoid(bodyParts) {
     if (body) {
         body.material.alpha = 1.0;
         body.material.backFaceCulling = false; // Keep false to act as double-sided
+
+
+        // --- ARSENAL & GEOMETRIC PARTS ---
+        // Iterate over parts from Solver (Sword, Shield, etc.)
+        bodyParts.forEach(part => {
+            if (!part.path || part.path.length < 2) return; // Skip non-geometric parts (e.g. Shirt flags)
+
+            // Convert DTO Path to Vector3
+            const path = part.path.map(p => new BABYLON.Vector3(p.x, p.y, p.z));
+
+            // Create Tube
+            // Note: HumanoidSolver now uses Local Space for weapons.
+            const mesh = BABYLON.MeshBuilder.CreateTube(part.name, {
+                path: path,
+                radius: part.radii[0], // Simplified radius usage
+                radiusFunction: (i, dist) => {
+                    // Support tapering if radii array has multiple values
+                    if (part.radii.length > 1) {
+                        const t = i / (path.length - 1);
+                        return part.radii[0] * (1 - t) + part.radii[part.radii.length - 1] * t;
+                    }
+                    return part.radii[0];
+                },
+                cap: BABYLON.Mesh.CAP_ALL,
+                updatable: true
+            }, scene);
+
+            // Apply Scale (Flattening)
+            if (part.scale) {
+                mesh.scaling = new BABYLON.Vector3(part.scale.x, part.scale.y, part.scale.z);
+            }
+
+            // Material Logic
+            const nameLower = part.name.toLowerCase();
+            let matType = 'standard';
+            if (nameLower.includes("metal") || nameLower.includes("blade") || nameLower.includes("guard") || nameLower.includes("plate") || nameLower.includes("head")) {
+                matType = 'metal';
+            } else if (nameLower.includes("wood") || nameLower.includes("shaft") || nameLower.includes("handle")) {
+                matType = 'wood';
+            } else {
+                matType = 'leather'; // Hilt grips etc
+            }
+
+            const mat = createMaterial(part.name + "_mat", part.color, matType);
+
+            // Custom Material Tuning for Metals
+            if (matType === 'metal') {
+                mat.specularColor = new BABYLON.Color3(0.9, 0.9, 0.9); // High Shine
+                mat.specularPower = 64; // Sharp highlights
+            } else if (matType === 'wood') {
+                mat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); // Low Shine
+                mat.specularPower = 4;
+            }
+
+            mesh.material = mat;
+
+            // --- ATTACHMENT LOGIC ---
+            // Attach weapons to Hand Bones so they move with the FBX animation/scaling
+            // Right Hand = Bone 12
+            // Left Hand = Bone 8
+            if (skeletonProxy) {
+                let targetBoneIndex = -1;
+
+                if (part.name.includes("Sword") || part.name.includes("Spear")) {
+                    targetBoneIndex = 12; // Right Hand
+                } else if (part.name.includes("Shield")) {
+                    targetBoneIndex = 8; // Left Hand
+                }
+
+                if (targetBoneIndex !== -1 && skeletonProxy.bones[targetBoneIndex]) {
+                    const charMesh = scene.getMeshByName("customHumanoid");
+                    if (charMesh) {
+                        mesh.attachToBone(skeletonProxy.bones[targetBoneIndex], charMesh);
+                    }
+
+                    // Rotation Fix based on Local Space Generation
+                    // C# Generates "Up" along Y.
+                    // Hand Bone (Right) usually points X or -X.
+                    // We might need to rotate the mesh to align with the hand.
+                    // Sword/Spear: Generated Vertical (Y). 
+                    // Attaching to Hand: We probably want it to align with the Hand's "Up" or "Forward".
+                    // For now, let's just fix the crash. Alignment can be tuned next.
+                } else {
+                    // If not attached, parent to root?
+                    // But these are local space coordinates... if not attached, they will spawn at 0,0,0 World.
+                    // We should assume they MUST attach.
+                }
+            }
+        });
     }
 
     const shirtColor = bodyParts.find(p => p.name.includes("Shirt"))?.color || "#3B5998";
