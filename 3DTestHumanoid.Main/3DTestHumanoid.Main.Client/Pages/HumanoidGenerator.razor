@@ -1,5 +1,6 @@
 ﻿@page "/humanoid"
 @using _3DTestHumanoid.Main.Client
+@using System.Text.Json
 @inject IJSRuntime JS
 
 <PageTitle>Humanoid Generator</PageTitle>
@@ -9,106 +10,34 @@
         <!-- Controls Sidebar -->
         <div class="col-md-3 bg-light p-3" style="height: 90vh; overflow-y: auto; display: flex; flex-direction: column;">
 
-            <!-- GENETICS SECTION -->
-            <h4 class="mb-3">Genetics</h4>
+            <h4 class="mb-3">Character Recipe</h4>
 
-            <div class="mb-4">
-                <label class="form-label small">Race Preset</label>
-                <select class="form-select form-select-sm" @onchange="OnRaceChanged">
-                    <option value="human">Human</option>
-                    <option value="orc">Orc</option>
-                    <option value="elf">Elf</option>
-                    <option value="werewolf">Werewolf</option>
-                </select>
-            </div>
-
+            <!-- Recipe Name -->
             <div class="mb-3">
-                <label class="form-label small">Height: <strong>@recipe.HeightCm cm</strong></label>
-                <input type="range" class="form-range" min="140" max="220"
-                       @bind="recipe.HeightCm" @bind:event="oninput" @onchange="Render" />
+                <label class="form-label small">Name</label>
+                <input type="text" class="form-control" @bind="recipe.Name" />
             </div>
 
-            <div class="mb-3">
-                <label class="form-label small">Muscularity: <strong>@recipe.Muscularity.ToString("0.0")</strong></label>
-                <input type="range" class="form-range" min="0" max="1" step="0.1"
-                       @bind="recipe.Muscularity" @bind:event="oninput" @onchange="Render" />
+            <!-- RECIPE ACTIONS -->
+            <div class="d-grid gap-2 mb-4">
+                 <div class="btn-group">
+                    <label class="btn btn-outline-secondary btn-sm" title="Load Recipe (.json)">
+                        <span class="bi bi-upload"></span> Load Recipe
+                        <InputFile OnChange="OnLoadRecipe" style="display: none;" accept=".json" />
+                    </label>
+                    <button class="btn btn-outline-primary btn-sm" @onclick="SaveRecipe" title="Save Recipe (.json)">
+                        <span class="bi bi-save"></span> Save Recipe
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" @onclick="ResetRecipe" title="Reset">
+                        <span class="bi bi-arrow-counterclockwise"></span>
+                    </button>
+                 </div>
             </div>
-
-            <div class="mb-3">
-                <label class="form-label small">Obesity: <strong>@recipe.Obesity.ToString("0.0")</strong></label>
-                <input type="range" class="form-range" min="0" max="1" step="0.1"
-                       @bind="recipe.Obesity" @bind:event="oninput" @onchange="Render" />
-            </div>
-
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" @bind="recipe.IsMale" @onclick="ToggleGender">
-                <label class="form-check-label">Is Male Frame</label>
-            </div>
-
-            <!-- ADVANCED MORPHOLOGY SECTION -->
-            <div class="accordion mb-3" id="morphologyAccordion">
-                <div class="accordion-item">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button @(showAdvanced ? "" : "collapsed") py-2 small" type="button" @onclick="() => showAdvanced = !showAdvanced">
-                            Advanced Morphology
-                        </button>
-                    </h2>
-                    <div class="accordion-collapse collapse @(showAdvanced ? "show" : "")">
-                        <div class="accordion-body p-2">
-                            <div class="mb-2">
-                                <label class="form-label x-small d-block mb-1">Shoulder Width: <strong>@recipe.ShoulderWidthMult.ToString("0.0")x</strong></label>
-                                <input type="range" class="form-range" min="0.8" max="2.0" step="0.1" 
-                                       @bind="recipe.ShoulderWidthMult" @bind:event="oninput" @onchange="Render" />
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label x-small d-block mb-1">Arm Length: <strong>@recipe.ArmLengthMult.ToString("0.0")x</strong></label>
-                                <input type="range" class="form-range" min="0.8" max="1.5" step="0.1" 
-                                       @bind="recipe.ArmLengthMult" @bind:event="oninput" @onchange="Render" />
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label x-small d-block mb-1">Leg Length: <strong>@recipe.LegLengthMult.ToString("0.0")x</strong></label>
-                                <input type="range" class="form-range" min="0.8" max="1.5" step="0.1" 
-                                       @bind="recipe.LegLengthMult" @bind:event="oninput" @onchange="Render" />
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label x-small d-block mb-1">Hunch: <strong>@recipe.TorsoHunch.ToString("0.0")</strong></label>
-                                <input type="range" class="form-range" min="0" max="1" step="0.1" 
-                                       @bind="recipe.TorsoHunch" @bind:event="oninput" @onchange="Render" />
-                            </div>
-                            <div class="mb-0">
-                                <label class="form-label x-small d-block mb-1">Neck Length: <strong>@recipe.NeckLengthMult.ToString("0.0")x</strong></label>
-                                <input type="range" class="form-range" min="0.5" max="2.0" step="0.1" 
-                                       @bind="recipe.NeckLengthMult" @bind:event="oninput" @onchange="Render" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <style>
-                .x-small { font-size: 0.75rem; }
-            </style>
-
-            <!-- Primary Action Button -->
-            <button class="btn btn-primary w-100 mb-2" @onclick="Render">
-                <span class="bi bi-arrow-clockwise"></span> Regenerate Mesh
-            </button>
-
-            <!-- Load FBX Button -->
-            <button class="btn btn-outline-secondary w-100 mb-2" @onclick="LoadFbx">
-                <span class="bi bi-box-seam"></span> Load FBX Source
-            </button>
-
-            <!-- Test Walk Button -->
-            <button class="btn @(isWalking ? "btn-danger" : "btn-warning") w-100 mb-4" @onclick="ToggleWalk">
-                <span class="bi @(isWalking ? "bi-stop-fill" : "bi-play-fill")"></span> 
-                @(isWalking ? "Stop Walking" : "Test Walk (WASD)")
-            </button>
-
+            
             <hr />
 
             <!-- APPEARANCE SECTION -->
-            <h4 class="mb-3">Equipment</h4>
+            <h5 class="mb-3">Equipment</h5>
 
             <div class="mb-3">
                 <label class="form-label small">Skin Tone</label>
@@ -129,64 +58,42 @@
                 <label class="form-check-label">Boots</label>
             </div>
 
-            <!-- Spacer to push download to bottom -->
-            <div style="flex-grow: 1;"></div>
-
-            <!-- FBX CONTROL SECTION -->
-            <h4 class="mb-3">Rigged Model Controls</h4>
+            <!-- MORPHOLOGY SECTION -->
+            <h5 class="mb-3">Morphology</h5>
             
             <div class="mb-3">
-                <button class="btn btn-outline-secondary w-100 mb-2" @onclick="LoadFbx">
-                    <span class="bi bi-box-seam"></span> Reload Model
-                </button>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label small">Height Scale: <strong>@customHeight.ToString("0.0")x</strong></label>
+                <label class="form-label small">Height Scale: <strong>@recipe.HeightScale.ToString("0.0")x</strong></label>
                 <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
-                       @bind="customHeight" @bind:event="oninput" @onchange="UpdateCustomization" />
+                       @bind="recipe.HeightScale" @bind:event="oninput" @onchange="Render" />
             </div>
 
             <div class="mb-3">
-                <label class="form-label small">Width/Weight: <strong>@customWidth.ToString("0.0")x</strong></label>
+                <label class="form-label small">Width/Weight: <strong>@recipe.WidthScale.ToString("0.0")x</strong></label>
                 <input type="range" class="form-range" min="0.5" max="2.0" step="0.1"
-                       @bind="customWidth" @bind:event="oninput" @onchange="UpdateCustomization" />
+                       @bind="recipe.WidthScale" @bind:event="oninput" @onchange="Render" />
             </div>
-
-            <div class="mb-3">
-                <label class="form-label small">Skin Color</label>
-                <input type="color" class="form-control form-control-color w-100"
-                       @bind="skinColor" @bind:event="oninput" @onchange="UpdateCustomization" />
-            </div>
-
+            
             <div class="form-check mb-4">
                 <input class="form-check-input" type="checkbox" @bind="xRayMode" @onclick="ToggleXRay">
-                <label class="form-check-label">X-Ray Mode (Show Skeleton)</label>
+                <label class="form-check-label">X-Ray Mode</label>
             </div>
 
-            <hr />
-            
-            <!-- LEGACY SECTION (Collapsed) -->
-            <details>
-                <summary>Legacy Procedural Controls</summary>
-                
-                <div class="mb-3 mt-3">
-                    <label class="form-label small">Height: <strong>@recipe.HeightCm cm</strong></label>
-                    <input type="range" class="form-range" min="140" max="220"
-                           @bind="recipe.HeightCm" @bind:event="oninput" @onchange="Render" />
-                </div>
-                
-                <button class="btn btn-primary w-100 mb-2" @onclick="Render">
-                    <span class="bi bi-arrow-clockwise"></span> Procedural Mesh
-                </button>
-            </details>
-            
             <div style="flex-grow: 1;"></div>
+            
+            <!-- MODEL ACTIONS -->
+            <h5 class="mb-2">3D Model</h5>
+            <div class="d-grid gap-2 mt-auto">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="LoadFbx">
+                     <span class="bi bi-arrow-repeat"></span> Reset Base Model
+                </button>
+                
+                <label class="btn btn-outline-secondary btn-sm">
+                    <span class="bi bi-file-earmark-binary"></span> Import .GLB Mesh
+                    <InputFile OnChange="OnLoadGlb" style="display: none;" accept=".glb,.gltf" />
+                </label>
 
-            <!-- Download Button -->
-            <div class="d-grid gap-2 mt-3">
                 <button class="btn btn-success" @onclick="DownloadGlb">
-                    <span class="bi bi-download"></span> Download .GLB
+                    <span class="bi bi-download"></span> Export Model (.GLB)
                 </button>
             </div>
 
@@ -203,8 +110,7 @@
     private IJSObjectReference? module;
     private HumanoidRecipe recipe = new HumanoidRecipe();
     private bool isWalking = false;
-    private bool showAdvanced = false;
-    private CancellationTokenSource? walkCts;
+    private bool xRayMode = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -212,7 +118,7 @@
         {
             try
             {
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/humanoidRenderer.js?v=5");
+                module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/humanoidRenderer.js?v=7");
                 await module.InvokeVoidAsync("initCanvas", "renderCanvas");
                 await Render();
             }
@@ -223,85 +129,62 @@
         }
     }
 
-    private async Task ToggleGender()
-    {
-        recipe.IsMale = !recipe.IsMale;
-        await Render();
-    }
-
-    private async Task OnRaceChanged(ChangeEventArgs e)
-    {
-        string race = e.Value?.ToString() ?? "human";
-        
-        // Reset defaults
-        recipe.ShoulderWidthMult = 1.0f;
-        recipe.ArmLengthMult = 1.0f;
-        recipe.LegLengthMult = 1.0f;
-        recipe.TorsoHunch = 0.0f;
-        recipe.NeckLengthMult = 1.0f;
-        recipe.NeckLengthMult = 1.0f;
-        recipe.SkinColor = "#D2B48C"; // Human tan
-        recipe.HasShirt = false;
-        recipe.HasPants = false;
-        recipe.HasBoots = false;
-
-        switch (race)
-        {
-            case "orc":
-                recipe.ShoulderWidthMult = 1.4f;
-                recipe.Muscularity = 0.9f;
-                recipe.SkinColor = "#4A5D23"; // Orc green
-                recipe.TorsoHunch = 0.3f;
-                break;
-            case "elf":
-                recipe.HeightCm = 200f;
-                recipe.Obesity = 0.1f;
-                recipe.Muscularity = 0.3f;
-                recipe.NeckLengthMult = 1.3f;
-                recipe.ShoulderWidthMult = 0.9f;
-                break;
-            case "werewolf":
-                recipe.TorsoHunch = 0.8f;
-                recipe.ArmLengthMult = 1.3f;
-                recipe.Muscularity = 0.8f;
-                recipe.SkinColor = "#5C4033"; // Brown fur-like color
-                break;
-        }
-
-        await Render();
-    }
-
     private async Task Render()
     {
         if (module is not null)
         {
-            var bodyParts = HumanoidSolver.Solve(recipe);
-            await module.InvokeVoidAsync("renderHumanoid", bodyParts);
+            // Update Visuals
+            await module.InvokeVoidAsync("renderHumanoid", HumanoidSolver.Solve(recipe));
+            await module.InvokeVoidAsync("setBodyScale", recipe.HeightScale, recipe.WidthScale);
+            await module.InvokeVoidAsync("setSkinColor", recipe.SkinColor);
         }
     }
 
-    // Customization Variables
-    private float customHeight = 1.0f;
-    private float customWidth = 1.0f;
-    private bool xRayMode = false;
-    private string skinColor = "#D2B48C";
+    // --- RECIPE MANAGEMENT ---
 
-    private async Task UpdateCustomization()
+    private void ResetRecipe()
     {
+        recipe = new HumanoidRecipe();
+        StateHasChanged();
+        _ = Render();
+    }
+
+    private async Task SaveRecipe()
+    {
+        var json = JsonSerializer.Serialize(recipe, new JsonSerializerOptions { WriteIndented = true });
+        var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+        var base64 = Convert.ToBase64String(bytes);
+        var filename = $"{recipe.Name.Replace(" ", "_")}.json";
+        
+        // Use module instance for exported functions
         if (module is not null)
         {
-            await module.InvokeVoidAsync("setBodyScale", customHeight, customWidth);
-            await module.InvokeVoidAsync("setSkinColor", skinColor);
+            await module.InvokeVoidAsync("downloadFileFromClient", filename, base64);
         }
     }
 
-    private async Task ToggleXRay()
+    private async Task OnLoadRecipe(InputFileChangeEventArgs e)
     {
-        xRayMode = !xRayMode;
-        if (module is not null)
-        {
-            await module.InvokeVoidAsync("setXRayMode", xRayMode);
+        try {
+            var file = e.File;
+            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024);
+            recipe = await JsonSerializer.DeserializeAsync<HumanoidRecipe>(stream) ?? new HumanoidRecipe();
+            await Render();
+        } catch (Exception ex) {
+            Console.WriteLine("Error loading recipe: " + ex.Message);
         }
+    }
+
+    // --- MODEL IO ---
+
+    private async Task OnLoadGlb(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+        using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        await module.InvokeVoidAsync("loadGlbModel", ms.ToArray());
     }
 
     private async Task LoadFbx()
@@ -309,30 +192,24 @@
         if (module is not null)
         {
             await module.InvokeVoidAsync("loadHumanoidFbx");
-            // Apply current customization after load
-            await UpdateCustomization();
-            if (xRayMode) await module.InvokeVoidAsync("setXRayMode", true);
+            await Render();
         }
     }
-
-    private async Task ToggleWalk()
-    {
-        isWalking = !isWalking;
-        if (module is not null)
-        {
-            await module.InvokeVoidAsync("setAnimationState", isWalking ? "walk" : "idle");
-        }
-    }
-    
-    // Legacy Loop Removed
 
     private async Task DownloadGlb()
     {
         if (module is not null)
         {
-            string gender = recipe.IsMale ? "Male" : "Female";
-            string filename = $"Human_{gender}_{recipe.HeightCm}cm";
+            string filename = $"{recipe.Name}_Export";
             await module.InvokeVoidAsync("downloadModel", filename);
         }
+    }
+    
+    // --- VIEW CONTROLS ---
+
+    private async Task ToggleXRay()
+    {
+        xRayMode = !xRayMode;
+        if (module is not null) await module.InvokeVoidAsync("setXRayMode", xRayMode);
     }
 }

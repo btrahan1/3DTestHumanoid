@@ -422,3 +422,68 @@ export function renderHumanoid(bodyParts) {
         createClothingMesh("cloth_boots", [5, 6], 2.8, bootColor, [13, 16]);
     }
 }
+
+export function downloadModel(filename) {
+    if (!scene) return;
+    console.log("Downloading GLB...");
+
+    // Export scene to GLB
+    BABYLON.GLTF2Export.GLBAsync(scene, filename).then((glb) => {
+        glb.downloadFiles();
+    });
+}
+
+export function loadGlbModel(data) {
+    if (!scene) return;
+    try {
+        console.log("Loading GLB from stream...");
+
+        // Dispose existing meshes
+        scene.meshes.forEach(m => {
+            if (m.name !== "ground" && m.name !== "skybox") m.dispose();
+        });
+        if (characterRoot) characterRoot.dispose();
+        if (skeletonProxy) skeletonProxy.dispose();
+        clothingSkeletons.forEach(s => s.dispose());
+        clothingSkeletons = [];
+
+        // Create new Root
+        characterRoot = new BABYLON.TransformNode("characterRoot", scene);
+
+        // Create Blob URL
+        const blob = new Blob([data]);
+        const url = URL.createObjectURL(blob);
+
+        BABYLON.SceneLoader.AppendAsync("", url, scene, (s) => {
+            console.log("GLB Loaded successfully");
+
+            // Re-bind camera?
+            // Find root mesh or skeleton
+            // Babylon GLTF loader creates __root__ usually.
+            const rootMesh = scene.meshes.find(m => m.name === "__root__");
+            if (rootMesh) {
+                rootMesh.parent = characterRoot;
+                // Fix rotation if needed (GLTF is usually Y-up but sometimes rotated).
+                // Usually __root__ corrects valid GLTF.
+            }
+
+            // Try to find skeleton and animations
+            // Reset animState
+            animState = "idle";
+
+        }, ".glb");
+
+    } catch (e) {
+        console.error("Error loading GLB:", e);
+    }
+}
+
+// ------ RECIPE DOWNLOAD HELPER ------
+export function downloadFileFromClient(filename, base64Content) {
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = "data:application/json;base64," + base64Content;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
