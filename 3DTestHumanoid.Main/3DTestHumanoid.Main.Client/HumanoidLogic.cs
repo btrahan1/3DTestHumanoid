@@ -135,7 +135,7 @@ public static class HumanoidSolver
         if (!string.Equals(recipe.HandsSlot, "None", StringComparison.OrdinalIgnoreCase))
         {
              string col = recipe.LeatherColor;
-             if (recipe.HandsSlot.Contains("Cloth") || recipe.HandsSlot.Contains("Gloves")) col = recipe.ClothColor;
+             if (recipe.HandsSlot.Contains("Cloth")) col = recipe.ClothColor;
              if (recipe.HandsSlot.Contains("Chain")) col = recipe.ChainColor;
              if (recipe.HandsSlot.Contains("Plate") || recipe.HandsSlot.Contains("Gauntlet")) col = recipe.MetalColor;
 

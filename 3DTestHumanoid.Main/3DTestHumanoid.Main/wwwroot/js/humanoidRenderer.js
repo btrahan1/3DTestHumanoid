@@ -482,7 +482,9 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
 
             // INCLUDE check
             if (includeBones) {
-                if (!includeBones.includes(b0) || !includeBones.includes(b1) || !includeBones.includes(b2)) continue;
+                // Relaxed Filter: Allow triangle if AT LEAST ONE vertex is in the allowed bones.
+                // This creates an overlap at the joints, preventing gaps.
+                if (!includeBones.includes(b0) && !includeBones.includes(b1) && !includeBones.includes(b2)) continue;
             }
 
             const n0 = addVertex(i0);
