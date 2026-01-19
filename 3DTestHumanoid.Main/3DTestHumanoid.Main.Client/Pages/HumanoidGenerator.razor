@@ -354,8 +354,8 @@
     {
         if (module is not null)
         {
-            // Update Visuals
-            await module.InvokeVoidAsync("renderHumanoid", HumanoidSolver.Solve(recipe));
+            // Update Visuals (Disable procedural body, keep equipment/armor flags)
+            await module.InvokeVoidAsync("renderHumanoid", HumanoidSolver.Solve(recipe, false));
             await module.InvokeVoidAsync("setBodyScale", recipe.HeightScale, recipe.WidthScale);
             
             // Calculate Thickness derived from BodyType

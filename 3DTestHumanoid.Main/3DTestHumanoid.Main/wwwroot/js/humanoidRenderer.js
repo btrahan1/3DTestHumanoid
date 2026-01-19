@@ -1,6 +1,7 @@
 ﻿console.log("DEBUG: VERSION MANUAL SKELETON REBUILD LOADED");
 let animDebugLogged = false;
-let restQuaternions = new Map();
+let lastBodyParts = [];
+const restQuaternions = new Map();
 
 let engine = null;
 let scene = null;
@@ -262,45 +263,49 @@ export async function loadHumanoidFbx() {
     console.log("Loading Anatomical Foundation (PerfectMale / GLB)...");
 
     try {
-        // Dispose existing
-        const oldMesh = scene.getMeshByName("customHumanoid");
-        if (oldMesh) oldMesh.dispose();
+        // 1. DISPOSE EVERYTHING (Fresh start)
+        characterRoot.getChildMeshes().forEach(m => m.dispose());
+        characterRoot.getChildren().forEach(c => c.dispose());
         if (skeletonProxy) skeletonProxy.dispose();
         clothingSkeletons.forEach(s => s.dispose());
         clothingSkeletons = [];
         scene.meshes.filter(m => m.name.startsWith("cloth_")).forEach(m => m.dispose());
+        scene.meshes.filter(m => m.name.startsWith("armor_")).forEach(m => m.dispose());
 
-        // 1. High-Performance Load: Native GLB
+        // 2. LOAD GLB
         try {
             console.log("Importing Native Anatomical glTF (PerfectMale.glb)...");
+            const result = await BABYLON.SceneLoader.ImportMeshAsync("", "./", "PerfectMale.glb", scene);
 
-            const result = await BABYLON.SceneLoader.ImportMeshAsync("", "./", "PerfectMale.glb", scene, (evt) => {
-                if (evt.lengthComputable && evt.total > 0) {
-                    let percent = (evt.loaded / evt.total * 100).toFixed(0);
-                    if (parseInt(percent) % 25 === 0) console.log(`Loading GLB: ${percent}%`);
-                }
-            });
-
-            // GLB Scale Normalization: 35x is the sweet spot for these world units
+            // Scale Normalization
             characterRoot.scaling = new BABYLON.Vector3(35, 35, 35);
-
             const root = result.meshes[0];
-            // DO NOT rename __root__ or move it, glTF relies on it for handedness
+            root.name = "characterContainer"; // EXPLICIT NAME for parenting
+            window.humanoidContainer = root; // PERSISTENT REFERENCE
+            root.position = BABYLON.Vector3.Zero();
             root.parent = characterRoot;
 
-            // GLB-Specific: Stop any auto-playing animation groups from override
             if (result.animationGroups) {
-                result.animationGroups.forEach(ag => {
-                    console.log("Stopping GLB Animation Group:", ag.name);
-                    ag.stop();
-                });
+                result.animationGroups.forEach(ag => ag.stop());
+            }
+
+            // AUTO-CENTER
+            let minX = Infinity, maxX = -Infinity;
+            result.meshes.forEach(m => {
+                if (m.name !== "__root__" && m.geometry) {
+                    m.refreshBoundingInfo();
+                    const box = m.getBoundingInfo().boundingBox;
+                    minX = Math.min(minX, box.minimumWorld.x);
+                    maxX = Math.max(maxX, box.maximumWorld.x);
+                }
+            });
+            if (minX !== Infinity) {
+                root.position.x = -((minX + maxX) / 2);
             }
 
             if (result.skeletons.length > 0) {
                 skeletonProxy = result.skeletons[0];
-                console.log("GLB Skeleton Active:", skeletonProxy.name);
-
-                // Capture Rest Pose for relative animation
+                console.log(`GLB Skeleton '${skeletonProxy.name}' has ${skeletonProxy.bones.length} bones.`);
                 restQuaternions.clear();
                 skeletonProxy.bones.forEach(b => {
                     const node = b.getTransformNode();
@@ -309,108 +314,103 @@ export async function loadHumanoidFbx() {
                     }
                 });
 
-                console.log("Bone Names Found:", skeletonProxy.bones.map(b => b.name).join(", "));
-            } else {
-                console.warn("No skeletons found in GLB. Checking TransformNodes...");
+                let minY = Infinity, maxY = -Infinity;
+                result.meshes.forEach(m => {
+                    if (m.name !== "__root__" && m.geometry) {
+                        m.refreshBoundingInfo();
+                        const box = m.getBoundingInfo().boundingBox;
+                        minY = Math.min(minY, box.minimumWorld.y);
+                        maxY = Math.max(maxY, box.maximumWorld.y);
+                    }
+                });
+                console.log(`DIAGNOSTIC: GLB Native Height = ${maxY - minY} units.`);
             }
 
-            // Material Mapping (Universal PBR)
+            console.log("Root Mesh:", root.name, "Parent:", root.parent ? root.parent.name : "null");
+            console.log("Root Rotation:", root.rotation.toString(), "Root Quaternion:", root.rotationQuaternion ? root.rotationQuaternion.toString() : "null");
+
+            // 3. GENERATE REGION BRAIN & APPLY MATERIALS
+            console.log("Meshes Found:", result.meshes.map(m => m.name).join(", "));
+
+            let bodyMesh = result.meshes.find(m => {
+                const n = m.name.toLowerCase();
+                return n.includes("body") || n.includes("skin") || n.includes("humanoid");
+            });
+
+            // Fallback: If no "Body" mesh found, take the largest mesh that has skeleton indices
+            if (!bodyMesh) {
+                const skinnedMeshes = result.meshes.filter(m => m.getVerticesData(BABYLON.VertexBuffer.MatricesIndicesKind));
+                if (skinnedMeshes.length > 0) {
+                    skinnedMeshes.sort((a, b) => b.getTotalVertices() - a.getTotalVertices());
+                    bodyMesh = skinnedMeshes[0];
+                }
+            }
+
+            if (bodyMesh && skeletonProxy) {
+                console.log("Generating Region Brain from:", bodyMesh.name);
+                const positions = bodyMesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+                const indices = bodyMesh.getIndices();
+                const matricesIndices = bodyMesh.getVerticesData(BABYLON.VertexBuffer.MatricesIndicesKind);
+                const matricesWeights = bodyMesh.getVerticesData(BABYLON.VertexBuffer.MatricesWeightsKind);
+                const regionIds = [];
+                for (let i = 0; i < positions.length / 3; i++) {
+                    let maxW = 0, mainB = -1;
+                    for (let k = 0; k < 4; k++) {
+                        if (matricesWeights[i * 4 + k] > maxW) {
+                            maxW = matricesWeights[i * 4 + k];
+                            mainB = matricesIndices[i * 4 + k];
+                        }
+                    }
+                    const bName = skeletonProxy.bones[mainB].name.toLowerCase();
+                    let rId = 1; // Torso
+                    if (bName.includes("head") || bName.includes("neck")) rId = 0;
+                    else if (bName.includes("leftarm") || bName.includes("leftforearm") || bName.includes("lefthand")) rId = 2;
+                    else if (bName.includes("rightarm") || bName.includes("rightforearm") || bName.includes("righthand")) rId = 3;
+                    else if (bName.includes("leftupleg") || bName.includes("rightupleg")) rId = 4;
+                    else if (bName.includes("leftleg") || bName.includes("leftfoot")) rId = 5;
+                    else if (bName.includes("rightleg") || bName.includes("rightfoot")) rId = 6;
+                    regionIds.push(rId);
+                }
+
+                window.humanoidData = {
+                    positions, indices, matricesIndices, matricesWeights, regionIds,
+                    bones: skeletonProxy.bones.map(b => ({ name: b.name }))
+                };
+            }
+
             result.meshes.forEach(m => {
                 const name = m.name.toLowerCase();
-                // We target any meshes that aren't the root __root__
                 if (m.name !== "__root__" && m.name !== "customHumanoidRoot") {
                     if (name.includes("eye")) {
                         m.material = createMaterial("perfectEyes", "#FFFFFF", 'eyes');
                     } else if (name.includes("hair") || name.includes("lash")) {
                         m.material = createMaterial("perfectHair", "#221100", 'cloth');
-                    } else {
-                        // Default to Muscular Skin for the main anatomy
+                    } else if (name.includes("body") || name.includes("skin") || name.includes("humanoid")) {
                         m.material = createMaterial("perfectSkin", "#FFDBAC", 'skin');
+                        m.name = "customHumanoid"; // CRITICAL: Allow engine to find the body
                         window.humanoid = m;
                     }
                 }
             });
+            console.log("Perfect Anatomical Base Loaded. humanoidData status:", !!window.humanoidData);
 
-            console.log("Perfect Anatomical Base Loaded via GLB!");
+            // RE-APPLY UI STATE
+            const currentSkin = "#FFDBAC";
+            setSkinColor(currentSkin);
 
-        } catch (glbErr) {
-            console.warn("GLB Load Failed, attempting JSON Fallback...", glbErr);
-
-            // FALLBACK: Load our pre-processed JSON
-            const dataResp = await fetch("./humanoid_data.json");
-            const data = await dataResp.json();
-            window.humanoidData = data;
-
-            // Rebuild Mesh & Multi-Material from JSON
-            console.log("Applying Multi-Material Intelligence...");
-            const customMesh = new BABYLON.Mesh("customHumanoid", scene);
-            const vertexData = new BABYLON.VertexData();
-            vertexData.positions = data.positions;
-            vertexData.indices = data.indices;
-            vertexData.applyToMesh(customMesh);
-            customMesh.parent = characterRoot;
-
-            // --- MATERIAL REGION LOGIC ---
-            // Mapping: 0:Shoes, 1:Pants, 2:Sweater, 3:Body, 4:Hair, 5:Eyelashes, 6:Eyes
-            const multimat = new BABYLON.MultiMaterial("humanoidMultiMat", scene);
-            multimat.subMaterials.push(createMaterial("mat_shoes", "#333333", "leather")); // 0
-            multimat.subMaterials.push(createMaterial("mat_pants", "#222222", "cloth"));   // 1
-            multimat.subMaterials.push(createMaterial("mat_sweater", "#444444", "cloth")); // 2
-            multimat.subMaterials.push(createMaterial("mat_skin", "#FFDBAC", "skin"));     // 3
-            multimat.subMaterials.push(createMaterial("mat_hair", "#332211", "cloth"));    // 4
-            multimat.subMaterials.push(createMaterial("mat_lashes", "#111111", "cloth"));  // 5
-            multimat.subMaterials.push(createMaterial("mat_eyes", "#FFFFFF", "eyes"));     // 6
-            customMesh.material = multimat;
-
-            // Partition into SubMeshes
-            customMesh.subMeshes = [];
-            let currentOffset = 0;
-            // Iterate over the 7 mesh parts. Each part has indices in data.indices.
-            // Since our parser merged them in order, we can calculate count.
-            const partCounts = [0, 0, 0, 0, 0, 0, 0];
-            data.materialIds.forEach(id => { if (id < 7) partCounts[id]++; });
-
-            // Note: v_master_offset incremented by (len(v_list) // 3) in Python.
-            // We need the TRIANGLE index counts.
-            // Simplified approach: find max index in each material group
-            let triPtr = 0;
-            for (let m = 0; m < 7; m++) {
-                // How many triangles belong to this material?
-                // Our parser process: all_indices.extend(tri_indices)
-                // We need to know where each part's triangles end. 
-                // We'll calculate it by looking at the index values.
-                let partTriCount = 0;
-                let startPtr = triPtr;
-                while (triPtr < data.indices.length) {
-                    const vIdx = data.indices[triPtr];
-                    if (data.materialIds[vIdx] === m) {
-                        triPtr += 3;
-                        partTriCount += 3;
-                    } else {
-                        break;
-                    }
-                }
-                if (partTriCount > 0) {
-                    new BABYLON.SubMesh(m, 0, data.positions.length / 3, startPtr, partTriCount, customMesh);
-                }
+            // RE-RENDER: Trigger equipment generation now that humanoidData is ready
+            if (lastBodyParts.length > 0) {
+                console.log(`Post-Load Equipment Render with ${lastBodyParts.length} parts...`);
+                renderHumanoid(lastBodyParts);
+            } else {
+                console.log("Post-Load: No cached bodyParts to render yet.");
             }
 
-            // --- REBUILD SKELETON PROXY ---
-            skeletonProxy = new BABYLON.Skeleton("mixamoSkeleton", "skel_id", scene);
-            data.bones.forEach((b, i) => {
-                const bone = new BABYLON.Bone(b.name, skeletonProxy,
-                    b.parentIndex !== -1 ? skeletonProxy.bones[b.parentIndex] : null,
-                    BABYLON.Matrix.Translation(b.pos[0], b.pos[1], b.pos[2]));
-            });
-            customMesh.skeleton = skeletonProxy;
-
-            window.humanoid = customMesh;
+        } catch (glbErr) {
+            console.error("GLB Load Failed:", glbErr);
         }
-
-        // 4. Animation logic is already handled by the global runRenderLoop in initCanvas
-
     } catch (e) {
-        console.error("Error loading Mixamo foundation:", e);
+        console.error("Critical Error in loadHumanoidFbx:", e);
     }
 }
 
@@ -418,19 +418,35 @@ export async function loadHumanoidFbx() {
 export function setAnimationState(state) { animState = state; }
 export function setBodyScale(height, width) {
     if (!characterRoot) return;
-    characterRoot.scaling.y = height;
-    characterRoot.scaling.x = width;
-    characterRoot.scaling.z = width;
+    const baseScale = 35.0; // Phase 11 Calibration
+    characterRoot.scaling.y = height * baseScale;
+    characterRoot.scaling.x = width * baseScale;
+    characterRoot.scaling.z = width * baseScale;
 }
 export function setXRayMode(enabled) {
-    const mesh = scene.getMeshByName("customHumanoid");
-    if (!mesh) return;
-    mesh.material.alpha = enabled ? 0.5 : 1.0;
+    if (!characterRoot) return;
+    characterRoot.getChildMeshes().forEach(m => {
+        if (m.material) {
+            m.material.alpha = enabled ? 0.3 : 1.0;
+            // Ensure transparency is enabled in PBR
+            if (m.material instanceof BABYLON.PBRMaterial) {
+                m.material.transparencyMode = enabled ? BABYLON.PBRMaterial.PBRMETHOD_BLEND : BABYLON.PBRMaterial.PBRMETHOD_OPAQUE;
+            }
+        }
+    });
 }
 export function setSkinColor(hexColor) {
-    const mesh = scene.getMeshByName("customHumanoid");
-    if (!mesh) return;
-    mesh.material.albedoColor = BABYLON.Color3.FromHexString(hexColor);
+    if (!characterRoot) return;
+    characterRoot.getChildMeshes().forEach(m => {
+        // Only update skin regions (meshes named "Body" or with skin material)
+        if (m.name.toLowerCase().includes("body") || (m.material && m.material.name.includes("Skin"))) {
+            if (m.material instanceof BABYLON.PBRMaterial) {
+                m.material.albedoColor = BABYLON.Color3.FromHexString(hexColor);
+            } else if (m.material instanceof BABYLON.StandardMaterial) {
+                m.material.diffuseColor = BABYLON.Color3.FromHexString(hexColor);
+            }
+        }
+    });
 }
 export function isMoving() { return animState === "walk"; }
 export function getCharacterPosition() {
@@ -497,7 +513,7 @@ export function setMorphology(shoulder, leg, arm, head, thickness = 1.0) {
     });
 
     // ROOT HEIGHT CORRECTION
-    const HEIGHT_FACTOR = 90.0;
+    const HEIGHT_FACTOR = 90.0 * 35.0; // Scaled for normalization
     if (characterRoot) {
         characterRoot.position.y = (leg - 1.0) * HEIGHT_FACTOR;
     }
@@ -505,9 +521,15 @@ export function setMorphology(shoulder, leg, arm, head, thickness = 1.0) {
 
 // --- CLOTHING MESH GENERATOR ---
 function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null, includeBones = null) {
-    if (!window.humanoidData || !scene) return;
+    if (!window.humanoidData || !scene) {
+        console.warn("createClothingMesh: humanoidData missing.");
+        return;
+    }
     const data = window.humanoidData;
     const regionIds = data.regionIds;
+    console.log(`Generating Armor: ${name}, regions: ${targetRegions}, inflation: ${inflateAmount}`);
+
+    const baseMesh = scene.getMeshByName("customHumanoid") || scene.meshes.find(m => m.name.toLowerCase().includes("body") || m.name.toLowerCase().includes("skin"));
 
     // 1. Filter Vertices & Build New Index Map
     const newPositions = [];
@@ -521,12 +543,11 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         let maxW = 0;
         let mainB = -1;
         for (let k = 0; k < 4; k++) {
-            if (data.matricesWeights[oldIdx * 4 + k] > maxW) {
-                maxW = data.matricesWeights[oldIdx * 4 + k];
-                mainB = data.matricesIndices[oldIdx * 4 + k];
-            }
-            else if (data.matricesWeights[oldIdx * 4 + k] === maxW && data.matricesIndices[oldIdx * 4 + k] < mainB) {
-                mainB = data.matricesIndices[oldIdx * 4 + k];
+            const bIdx = data.matricesIndices[oldIdx * 4 + k];
+            const weight = data.matricesWeights[oldIdx * 4 + k];
+            if (weight > maxW) {
+                maxW = weight;
+                mainB = bIdx;
             }
         }
         return mainB;
@@ -536,34 +557,45 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         if (indexMap.has(oldIdx)) return indexMap.get(oldIdx);
 
         // Position Check
-        const py = data.positions[oldIdx * 3 + 1];
-        if (maxHeight !== null && py > maxHeight) return -1; // CLIP
+        const rawY = data.positions[oldIdx * 3 + 1];
+        if (maxHeight !== null && rawY > maxHeight) return -1; // CLIP
 
         const newIdx = newPositions.length / 3;
 
         // Position + Inflation
-        const px = data.positions[oldIdx * 3];
-        const pz = data.positions[oldIdx * 3 + 2];
+        // Normalization Factor: High-Fidelity Sync
+        // Since we are extracting DIRECTLY from the GLB, norm is now 1.0!
+        const norm = 1.0;
+        const px = data.positions[oldIdx * 3] * norm;
+        const py = data.positions[oldIdx * 3 + 1] * norm;
+        const pz = data.positions[oldIdx * 3 + 2] * norm;
 
-        const baseMesh = scene.getMeshByName("customHumanoid");
-        let nx = 0, ny = 1, nz = 0;
+        // Auto-Center correction: GLB meshes are already shifted by root.position.x in load
+        // so we don't need additional offsets here.
+
+        // Inflation: Small GLB units
+        const inf = inflateAmount * 0.012; // Boosted from 0.005 to 0.012 (approx 1cm per unit)
+
+        let nx = 0, ny = 0, nz = 0;
         if (baseMesh) {
             const normals = baseMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
-            if (normals) {
-                // FLIP NORMALS: FBX data is inverted
+            if (normals && oldIdx * 3 + 2 < normals.length) {
+                // Mixamo GLTF normals are often flipped vs FBX/JSON
                 nx = -normals[oldIdx * 3];
                 ny = -normals[oldIdx * 3 + 1];
                 nz = -normals[oldIdx * 3 + 2];
             }
         }
 
-        newPositions.push(px + nx * inflateAmount);
-        newPositions.push(py + ny * inflateAmount);
-        newPositions.push(pz + nz * inflateAmount);
+        newPositions.push(px + nx * inf);
+        newPositions.push(py + ny * inf);
+        newPositions.push(pz + nz * inf);
 
-        // Weights
-        newMatricesIndices.push(data.matricesIndices[oldIdx * 4], data.matricesIndices[oldIdx * 4 + 1], data.matricesIndices[oldIdx * 4 + 2], data.matricesIndices[oldIdx * 4 + 3]);
-        newMatricesWeights.push(data.matricesWeights[oldIdx * 4], data.matricesWeights[oldIdx * 4 + 1], data.matricesWeights[oldIdx * 4 + 2], data.matricesWeights[oldIdx * 4 + 3]);
+        // Weights (Direct index use since we extracted from current skeleton)
+        for (let k = 0; k < 4; k++) {
+            newMatricesIndices.push(data.matricesIndices[oldIdx * 4 + k]);
+            newMatricesWeights.push(data.matricesWeights[oldIdx * 4 + k]);
+        }
 
         indexMap.set(oldIdx, newIdx);
         return newIdx;
@@ -598,9 +630,11 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
 
             // INCLUDE check
             if (includeBones) {
-                // Relaxed Filter: Allow triangle if AT LEAST ONE vertex is in the allowed bones.
-                // This creates an overlap at the joints, preventing gaps.
-                if (!includeBones.includes(b0) && !includeBones.includes(b1) && !includeBones.includes(b2)) continue;
+                // VERY Lenient Filter: Allow triangle if ANY vertex is in the allowed bones OR we are in a targeted region
+                if (!includeBones.includes(b0) && !includeBones.includes(b1) && !includeBones.includes(b2)) {
+                    // Fallback to region check if bone check fails
+                    if (matchCount < 3) continue;
+                }
             }
 
             const n0 = addVertex(i0);
@@ -614,7 +648,11 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         }
     }
 
-    if (newIndices.length === 0) return;
+    if (newIndices.length === 0) {
+        console.warn(`createClothingMesh: No indices generated for ${name}.`);
+        return;
+    }
+    console.log(`createClothingMesh: Created mesh ${name} with ${newIndices.length / 3} triangles.`);
 
     // 3. Create Mesh
     const mesh = new BABYLON.Mesh(name, scene);
@@ -642,13 +680,28 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
     // Material (Uses new PBR Helper)
     mesh.material = createMaterial(name + "_mat", colorHex, matType);
 
-    // Parent to Root so it moves with the character
-    mesh.parent = characterRoot;
+    // Parent to the same node as the body to inherit coordinate system/offsets
+    const container = window.humanoidContainer || scene.getMeshByName("characterContainer") || characterRoot;
+    mesh.parent = container;
+
+    if (baseMesh) {
+        // MATCH BODY TRANSFORMS EXACTLY
+        if (baseMesh.rotationQuaternion) mesh.rotationQuaternion = baseMesh.rotationQuaternion.clone();
+        else mesh.rotation = baseMesh.rotation.clone();
+        mesh.position = baseMesh.position.clone();
+        mesh.scaling = baseMesh.scaling.clone();
+    } else {
+        mesh.position = BABYLON.Vector3.Zero();
+        mesh.scaling = BABYLON.Vector3.One();
+        // Fallback: If no body mesh, use standard stand-up rotation
+        mesh.rotation.x = Math.PI / 2;
+    }
 }
 
 
 export function renderHumanoid(bodyParts) {
     if (!scene || !characterRoot) return;
+    lastBodyParts = bodyParts; // CACHE for post-load sync
 
     // Clean up old meshes AND skeletons
     scene.meshes.filter(m => m.name.startsWith("cloth_")).forEach(m => m.dispose());
@@ -672,26 +725,28 @@ export function renderHumanoid(bodyParts) {
 
 
         // --- ARSENAL & GEOMETRIC PARTS ---
-        // Iterate over parts from Solver (Sword, Shield, Head, Face...)
+        console.log(`renderHumanoid: Processing ${bodyParts.length} parts.`);
         bodyParts.forEach(part => {
             if (!part.path || part.path.length < 2) return;
 
             // SKIP FACE PARTS (Handled by renderFace for Bone attachment)
             if (part.name.startsWith("Face_")) return;
 
-            // Convert DTO Path to Vector3
-            const path = part.path.map(p => new BABYLON.Vector3(p.x, p.y, p.z));
+            // Convert DTO Path to Vector3 and NORMALIZE to GLB space
+            const norm = 2.0 / 175.0;
+            const path = part.path.map(p => new BABYLON.Vector3(p.x * norm, p.y * norm, p.z * norm));
 
             // Create Tube
             const mesh = BABYLON.MeshBuilder.CreateTube(part.name, {
                 path: path,
-                radius: part.radii[0],
+                radius: (part.radii[0] || 0.5) * norm,
                 radiusFunction: (i, dist) => {
                     if (part.radii.length > 1) {
                         const t = i / (path.length - 1);
-                        return part.radii[0] * (1 - t) + part.radii[part.radii.length - 1] * t;
+                        const r = part.radii[0] * (1 - t) + part.radii[part.radii.length - 1] * t;
+                        return r * norm;
                     }
-                    return part.radii[0];
+                    return (part.radii[0] || 0.5) * norm;
                 },
                 cap: BABYLON.Mesh.CAP_ALL,
                 updatable: true
@@ -755,9 +810,14 @@ export function renderHumanoid(bodyParts) {
                     // Attaching to Hand: We probably want it to align with the Hand's "Up" or "Forward".
                     // For now, let's just fix the crash. Alignment can be tuned next.
                 } else {
-                    // If not attached, parent to root?
-                    // But these are local space coordinates... if not attached, they will spawn at 0,0,0 World.
-                    // We should assume they MUST attach.
+                    // If not attached, parent to same as body
+                    if (charMesh) {
+                        mesh.parent = charMesh.parent;
+                        mesh.position = BABYLON.Vector3.Zero();
+                        mesh.rotation.x = Math.PI / 2; // STAND UP
+                    } else {
+                        mesh.parent = characterRoot;
+                    }
                 }
             }
         });
@@ -833,7 +893,7 @@ export function renderHumanoid(bodyParts) {
 
         } else if (slot === "Feet") {
             regions = [5, 6];
-            maxHeight = 45.0;
+            maxHeight = 0.5; // Normalized height for Boots (GLB space)
             if (type.includes("Plate")) inflation = 2.6;
             else if (type.includes("Cloth") || type.includes("Shoes")) inflation = 1.4;
             else inflation = 2.4;
@@ -948,8 +1008,9 @@ export function renderFace(bodyParts) {
         pupil.scaling.z = 0.5;
     };
 
-    createEye("face_eyeL", -3.5);
-    createEye("face_eyeR", 3.5);
+    // Removed for GLB transition
+    // createEye("face_eyeL", -3.5);
+    // createEye("face_eyeR", 3.5);
 
     // --- HELPER: Render Tube from DTO ---
     const renderGeometryPart = (part, matSpec) => {

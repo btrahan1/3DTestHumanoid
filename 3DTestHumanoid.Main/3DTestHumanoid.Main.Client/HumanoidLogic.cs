@@ -78,7 +78,7 @@ public class BodyPartDto
 
 public static class HumanoidSolver
 {
-    public static List<BodyPartDto> Solve(HumanoidRecipe recipe)
+    public static List<BodyPartDto> Solve(HumanoidRecipe recipe, bool includeBody = true)
     {
         var parts = new List<BodyPartDto>();
         
@@ -126,6 +126,8 @@ public static class HumanoidSolver
         // BASELINE: The standard depth for the face surface
         float baseFaceDepth = headWidthAtEyes * 1.15f; 
         
+        // Face features disabled for GLB transition
+        /*
         // 1. EYES (Isolated Multiplier)
         float eyeDepth = baseFaceDepth * recipe.EyeDepth; 
         
@@ -179,11 +181,11 @@ public static class HumanoidSolver
         
         if (recipe.HasEars)
         {
-             // Ears (Spheres/Tubes on side) handled by JS or we can add anchors?
-             // Let's keep JS handling Ears for now as it does Torus well.
              parts.Add(new BodyPartDto { Name = "Face_Ears", Color = recipe.SkinColor });
         }
+        */
 
+        /*
         if (!string.Equals(recipe.HairStyle, "None", StringComparison.OrdinalIgnoreCase))
         {
              parts.Add(new BodyPartDto { Name = $"Face_Hair_{recipe.HairStyle}", Color = recipe.HairColor });
@@ -193,6 +195,7 @@ public static class HumanoidSolver
         {
              parts.Add(new BodyPartDto { Name = $"Face_Beard_{recipe.BeardStyle}", Color = recipe.HairColor });
         }
+        */
         
         // We only pass flags to the renderer now. 
         // The Geometry is handled by Mesh Inflation in JS (Option B).
@@ -295,13 +298,16 @@ public static class HumanoidSolver
             new Vector3(armSep + (armLen * 0.25f), yNeck - armLen, armForwardOffset),          // Hand
             baseThick, muscleAdd, false, recipe.SkinColor);
 
-        parts.Add(lArm); parts.Add(rArm);
+        if (includeBody)
+        {
+            parts.Add(lArm); parts.Add(rArm);
 
-        // 3. UPDATE DELTOIDS (Shoulder Balls):
-        float deltSize = baseThick * 2.2f + muscleAdd;
-        string deltColor = recipe.SkinColor;
-        parts.Add(GenerateBall("L_Deltoid", new Vector3(-armSep, yNeck, armForwardOffset), deltSize, deltColor));
-        parts.Add(GenerateBall("R_Deltoid", new Vector3(armSep, yNeck, armForwardOffset), deltSize, deltColor));
+            // 3. UPDATE DELTOIDS (Shoulder Balls):
+            float deltSize = baseThick * 2.2f + muscleAdd;
+            string deltColor = recipe.SkinColor;
+            parts.Add(GenerateBall("L_Deltoid", new Vector3(-armSep, yNeck, armForwardOffset), deltSize, deltColor));
+            parts.Add(GenerateBall("R_Deltoid", new Vector3(armSep, yNeck, armForwardOffset), deltSize, deltColor));
+        }
 
         if (recipe.HasSword)
         {

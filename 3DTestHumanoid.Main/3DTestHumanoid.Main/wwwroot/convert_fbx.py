@@ -253,5 +253,5 @@ def parse_fbx_to_json(fbx_path, json_path):
     print(f"Saved to {json_path}")
 
 if __name__ == "__main__":
-    # Point to the High-Fidelity Realistic model (TestModel.fbx)
-    parse_fbx_to_json("TestModel.fbx", "humanoid_data.json")
+    # Point to the High-Fidelity Realistic model (PerfectMale foundation)
+    parse_fbx_to_json("PrefectMale_Rigged.fbx", "humanoid_data.json")
