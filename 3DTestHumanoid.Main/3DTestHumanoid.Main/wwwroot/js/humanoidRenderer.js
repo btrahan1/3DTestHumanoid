@@ -17,7 +17,6 @@ let inputMap = {};
 // --- BONE HELPERS ---
 function getBone(skel, name) {
     if (!skel) return null;
-    // Multi-Prefix Search (Native, mixamorig:, mixamorig9:)
     let bone = skel.bones.find(b => {
         const bn = b.name.toLowerCase();
         const tn = name.toLowerCase();
@@ -82,39 +81,51 @@ function updateAnimation() {
         }
 
         if (animState === "walk") {
-            const walkSpeed = 1.2;
+            const walkSpeed = 1.4;
             const cycle = time * walkSpeed;
-            const swingAmount = 0.4;
 
-            // Legs
+            // Legs: High stepping
             rotateJoint("LeftUpLeg", new BABYLON.Vector3(Math.sin(cycle) * 0.4, 0, 0));
             rotateJoint("LeftLeg", new BABYLON.Vector3(Math.max(0, Math.sin(cycle - 1)) * 0.4, 0, 0));
             rotateJoint("RightUpLeg", new BABYLON.Vector3(Math.sin(cycle + Math.PI) * 0.4, 0, 0));
             rotateJoint("RightLeg", new BABYLON.Vector3(Math.max(0, Math.sin(cycle + Math.PI - 1)) * 0.4, 0, 0));
 
-            // Arms: TEST ZERO (Let's see if the GLB naturally points them back)
-            rotateJoint("LeftArm", BABYLON.Vector3.Zero());
-            rotateJoint("RightArm", BABYLON.Vector3.Zero());
-            rotateJoint("LeftShoulder", BABYLON.Vector3.Zero());
-            rotateJoint("RightShoulder", BABYLON.Vector3.Zero());
+            // Left Arm swings with Right Leg (Reference side)
+            // Setting both to 'cycle'; rig mirroring will swap the phase to alternate them.
+            rotateJoint("LeftArm", new BABYLON.Vector3(0.0, 0, Math.sin(cycle) * 0.45));
+            rotateJoint("LeftForeArm", new BABYLON.Vector3(0, 0, -Math.max(0, Math.sin(cycle)) * 0.4));
+            rotateJoint("LeftHand", new BABYLON.Vector3(-0.4, 0, 0));
 
-            rotateJoint("Spine1", new BABYLON.Vector3(0, Math.sin(cycle) * 0.05, 0));
-            rotateJoint("Hips", new BABYLON.Vector3(0, Math.sin(cycle) * 0.05, 0));
+            // Right Arm swings with Left Leg (Matching the "Perfect" right side)
+            rotateJoint("RightArm", new BABYLON.Vector3(0.0, 0, Math.sin(cycle) * 0.45));
+            rotateJoint("RightForeArm", new BABYLON.Vector3(0, 0, -Math.max(0, Math.sin(cycle)) * 0.4));
+            rotateJoint("RightHand", new BABYLON.Vector3(-0.4, 0, 0));
+
+            // 38-Bone Rig Finger Stiffening
+            for (let i = 1; i <= 4; i++) {
+                rotateJoint(`LeftHandIndex${i}`, new BABYLON.Vector3(0, 0, -0.1)); // Point Down
+                rotateJoint(`RightHandIndex${i}`, new BABYLON.Vector3(0, 0, 0.1)); // Point Down
+            }
+
+            rotateJoint("LeftShoulder", new BABYLON.Vector3(0, 0, Math.sin(cycle) * 0.05));
+            rotateJoint("RightShoulder", new BABYLON.Vector3(0, 0, -Math.sin(cycle) * 0.05));
+
+            // Torso: Sway and Twist
+            rotateJoint("Spine1", new BABYLON.Vector3(0, Math.sin(cycle) * 0.1, 0));
+            rotateJoint("Hips", new BABYLON.Vector3(0, -Math.sin(cycle) * 0.05, 0));
 
         } else {
-            // Idle (A-Pose test)
+            // Idle (Relaxed A-Pose)
             const idleSpeed = 0.4;
             const cycle = time * idleSpeed;
 
-            // Zero arms to see TRUE natural rest pose
-            rotateJoint("LeftArm", BABYLON.Vector3.Zero());
-            rotateJoint("RightArm", BABYLON.Vector3.Zero());
-            rotateJoint("LeftShoulder", BABYLON.Vector3.Zero());
-            rotateJoint("RightShoulder", BABYLON.Vector3.Zero());
+            // Relaxed arms
+            rotateJoint("LeftArm", new BABYLON.Vector3(0, 0, -0.1 + Math.sin(cycle) * 0.02));
+            rotateJoint("RightArm", new BABYLON.Vector3(0, 0, 0.1 - Math.sin(cycle) * 0.02));
 
             rotateJoint("Spine1", new BABYLON.Vector3(Math.sin(cycle) * 0.02, 0, 0));
 
-            // Sync legs
+            // Relax legs
             rotateJoint("LeftUpLeg", BABYLON.Vector3.Zero());
             rotateJoint("RightUpLeg", BABYLON.Vector3.Zero());
             rotateJoint("LeftLeg", BABYLON.Vector3.Zero());
@@ -124,9 +135,12 @@ function updateAnimation() {
 }
 
 function updateMovement() {
-    if (!characterRoot) return;
-    let moveSpeed = 2.0;
-    let rotationSpeed = 0.05;
+    if (!characterRoot || !engine) return;
+
+    // Normalize speed using DeltaTime (approx 5.0 units per second)
+    const dt = engine.getDeltaTime() / 1000.0;
+    const moveSpeed = 5.0 * dt;
+    const rotationSpeed = 3.0 * dt;
     let isMoving = false;
 
     if (inputMap["w"]) {
@@ -1587,6 +1601,11 @@ export function loadGlbModel(data) {
 
         BABYLON.SceneLoader.AppendAsync("", url, scene, (s) => {
             console.log("GLB Loaded successfully");
+
+            // DEBUG: List all bones to find finger names
+            scene.skeletons.forEach(sk => {
+                console.log("Skeleton: " + sk.name, sk.bones.map(b => b.name));
+            });
 
             // Re-bind camera?
             // Find root mesh or skeleton
