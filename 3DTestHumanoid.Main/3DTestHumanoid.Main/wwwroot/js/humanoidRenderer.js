@@ -614,7 +614,7 @@ export function setMorphology(shoulder, leg, arm, head, thickness = 1.0) {
 }
 
 // --- CLOTHING MESH GENERATOR ---
-function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null, includeBones = null, smoothingIterations = 0) {
+function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null, includeBones = null, smoothingIterations = 0, minHeight = null) {
     if (!window.humanoidData || !scene) {
         console.warn("createClothingMesh: humanoidData missing.");
         return;
@@ -654,7 +654,8 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
 
         // Position Check
         const rawY = data.positions[oldIdx * 3 + 1];
-        if (maxHeight !== null && rawY > maxHeight) return -1; // CLIP
+        if (maxHeight !== null && rawY > maxHeight) return -1; // CLIP TOP
+        if (minHeight !== null && rawY < minHeight) return -1; // CLIP BOTTOM
 
         const newIdx = newPositions.length / 3;
 
@@ -1017,6 +1018,7 @@ export function renderHumanoid(bodyParts) {
     // Format: "Slot_Type" (e.g. "Torso_PlateArmor", "Legs_Pants")
 
     bodyParts.forEach(part => {
+
         const parts = part.name.split('_');
         if (parts.length < 2) return;
 
@@ -1027,6 +1029,7 @@ export function renderHumanoid(bodyParts) {
         let inflation = 1.0;
         let matType = 'cloth';
         let maxHeight = null;
+        let minHeight = null;
         let exclusions = [];
         let includeBones = null;
 
@@ -1055,7 +1058,8 @@ export function renderHumanoid(bodyParts) {
         // 2. Determine Regions based on SLOT
         if (slot === "Torso") {
             regions = [1, 0, 4]; // Torso + Neck (0) + Hips (4) bleed
-            maxHeight = 188;     // Clip before hitting face
+            maxHeight = 7.7;     // Base of neck
+            minHeight = 4.4;     // Lowered to overlap better with groin
             includeBones = [
                 getBoneIndex(skeletonProxy, "Hips"),
                 getBoneIndex(skeletonProxy, "Spine"),
@@ -1065,43 +1069,114 @@ export function renderHumanoid(bodyParts) {
             ];
 
         } else if (slot === "Shoulders") {
-            regions = [1, 2, 3];
+            regions = [2, 3, 1]; // Arm regions + Torso overlap to close gaps
             includeBones = [
                 getBoneIndex(skeletonProxy, "LeftShoulder"),
                 getBoneIndex(skeletonProxy, "LeftArm"),
                 getBoneIndex(skeletonProxy, "RightShoulder"),
                 getBoneIndex(skeletonProxy, "RightArm")
             ];
-            inflation += 0.5;
+            minHeight = 6.4; // Lower slightly to reach Chestplate
+            maxHeight = 8.1; // Reach up to cover collarbone
+            inflation += 0.4; // Restore some bulk for coverage
 
         } else if (slot === "Arms") {
-            regions = [1, 2, 3]; // Arm + Torso bleed
+            regions = [2, 3]; // Arm regions only (Remove Torso bleed)
             includeBones = [
                 getBoneIndex(skeletonProxy, "LeftArm"),
                 getBoneIndex(skeletonProxy, "LeftForeArm"),
                 getBoneIndex(skeletonProxy, "RightArm"),
                 getBoneIndex(skeletonProxy, "RightForeArm")
             ];
+            exclusions = [
+                getBoneIndex(skeletonProxy, "LeftHand"),
+                getBoneIndex(skeletonProxy, "RightHand"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex1"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex2"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex3"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex4"),
+                getBoneIndex(skeletonProxy, "RightHandIndex1"),
+                getBoneIndex(skeletonProxy, "RightHandIndex2"),
+                getBoneIndex(skeletonProxy, "RightHandIndex3"),
+                getBoneIndex(skeletonProxy, "RightHandIndex4")
+            ];
 
         } else if (slot === "Legs") {
-            regions = [4, 5, 6];
+            regions = [1, 4, 5, 6, 0]; // Catch everything from waist down
+            minHeight = 0.6;
+            maxHeight = 6.0; // High-waist to overlap breastplate (starts at 4.4)
+            inflation = 4.2;
+            includeBones = [
+                getBoneIndex(skeletonProxy, "Hips"),
+                getBoneIndex(skeletonProxy, "LeftUpLeg"),
+                getBoneIndex(skeletonProxy, "LeftLeg"),
+                getBoneIndex(skeletonProxy, "RightUpLeg"),
+                getBoneIndex(skeletonProxy, "RightLeg")
+            ];
+            exclusions = [
+                getBoneIndex(skeletonProxy, "LeftFoot"),
+                getBoneIndex(skeletonProxy, "RightFoot"),
+                getBoneIndex(skeletonProxy, "LeftToeBase"),
+                getBoneIndex(skeletonProxy, "RightToeBase")
+            ];
             if (matType === 'cloth') inflation = 1.2;
             if (matType === 'cloth') exclusions = [];
 
         } else if (slot === "Feet") {
-            regions = [4, 5, 6]; // Feet + Leg bleed
-            maxHeight = 0.5; // Normalized height for Boots (GLB space)
-            if (type.includes("Plate")) inflation = 2.6;
+            // SLEDGEHAMMER: Include ALL regions (0-31) for the feet slot.
+            // maxHeight will keep it strictly at the ankle level.
+            regions = Array.from({ length: 32 }, (_, i) => i);
+            maxHeight = 1.2;
+            includeBones = [
+                getBoneIndex(skeletonProxy, "LeftLeg"),
+                getBoneIndex(skeletonProxy, "RightLeg"),
+                getBoneIndex(skeletonProxy, "LeftFoot"),
+                getBoneIndex(skeletonProxy, "LeftToeBase"),
+                getBoneIndex(skeletonProxy, "LeftToe_End"),
+                getBoneIndex(skeletonProxy, "LeftToe_End_end"),
+                getBoneIndex(skeletonProxy, "RightFoot"),
+                getBoneIndex(skeletonProxy, "RightToeBase"),
+                getBoneIndex(skeletonProxy, "RightToe_End"),
+                getBoneIndex(skeletonProxy, "RightToe_End_end")
+            ];
+            exclusions = [
+                getBoneIndex(skeletonProxy, "LeftUpLeg"),
+                getBoneIndex(skeletonProxy, "RightUpLeg"),
+                getBoneIndex(skeletonProxy, "Hips"),
+                getBoneIndex(skeletonProxy, "Spine")
+            ];
+            if (type.includes("Plate")) inflation = 3.5; // Specific plate boost
             else if (type.includes("Cloth") || type.includes("Shoes")) inflation = 1.4;
             else inflation = 2.4;
 
         } else if (slot === "Hands") {
             regions = [2, 3];
-            inflation += 0.1;
+            // Hands must be SLIMMER and stop at wrist
+            inflation = 1.2;
+            smoothing = 5;
             includeBones = [
                 getBoneIndex(skeletonProxy, "LeftHand"),
-                getBoneIndex(skeletonProxy, "RightHand")
+                getBoneIndex(skeletonProxy, "LeftHandIndex1"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex2"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex3"),
+                getBoneIndex(skeletonProxy, "LeftHandIndex4"),
+                getBoneIndex(skeletonProxy, "RightHand"),
+                getBoneIndex(skeletonProxy, "RightHandIndex1"),
+                getBoneIndex(skeletonProxy, "RightHandIndex2"),
+                getBoneIndex(skeletonProxy, "RightHandIndex3"),
+                getBoneIndex(skeletonProxy, "RightHandIndex4")
             ];
+            // EXCLUDE EVERYTHING ELSE to kill blobs on bicep/torso
+            exclusions = [
+                getBoneIndex(skeletonProxy, "LeftArm"),
+                getBoneIndex(skeletonProxy, "RightArm"),
+                getBoneIndex(skeletonProxy, "LeftShoulder"),
+                getBoneIndex(skeletonProxy, "RightShoulder"),
+                getBoneIndex(skeletonProxy, "Hips"),
+                getBoneIndex(skeletonProxy, "Spine"),
+                getBoneIndex(skeletonProxy, "Spine1")
+            ];
+            // Forearm is NOT excluded anymore, allowing "Bleed" to cover the wrist.
 
         } else if (slot === "Head") {
             regions = [0]; // Head
@@ -1113,7 +1188,7 @@ export function renderHumanoid(bodyParts) {
         if (regions.length > 0) {
             // Unique ID for the mesh
             const meshName = `armor_${slot}_${type}`;
-            createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones, smoothing);
+            createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones, smoothing, minHeight);
         }
     });
 
