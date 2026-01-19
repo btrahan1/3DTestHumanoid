@@ -179,7 +179,16 @@ export function initCanvas(canvasId) {
     camera.upperRadiusLimit = 1000;
 
     const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-    light.intensity = 0.8;
+    light.intensity = 1.2; // Increased for PBR vibrancy
+
+    // Create a default environment for PBR reflections
+    const envHelper = scene.createDefaultEnvironment({
+        createGround: false,
+        createSkybox: false,
+    });
+    if (envHelper && envHelper.setMainColor) {
+        envHelper.setMainColor(BABYLON.Color3.Gray());
+    }
     const pl = new BABYLON.PointLight("pl", new BABYLON.Vector3(100, 100, -100), scene);
     pl.intensity = 0.6;
 
@@ -209,6 +218,64 @@ export function initCanvas(canvasId) {
 }
 
 // --- MATERIAL SYSTEM ---
+const noiseCache = new Map();
+function getNoiseTexture(type) {
+    if (noiseCache.has(type)) return noiseCache.get(type);
+
+    const size = 256;
+    const tex = new BABYLON.DynamicTexture(`noise_${type}`, size, scene);
+    const ctx = tex.getContext();
+
+    // Fill with WHITE (Acts as a multiplier for base color)
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, size, size);
+
+    // --- ULTIMATE GRIT PATTERNS ---
+    ctx.filter = "none";
+    for (let i = 0; i < (type === 'chain' ? 5000 : 3000); i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+
+        let c = Math.random() > 0.5 ? 20 : 230;
+        let r = c, g = c, b = c;
+
+        // Grime/Oxidation (Path B - Color)
+        if (Math.random() > 0.82) {
+            r = 90 + Math.random() * 40;
+            g = 60 + Math.random() * 30;
+            b = 40 + Math.random() * 20;
+        }
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+
+        if (type === 'plate') {
+            const len = Math.random() * 100 + 40;
+            ctx.fillRect(x, y, len, 1);
+            if (Math.random() > 0.94) {
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(x, y, 6, 6); // Dents
+            }
+        } else if (type === 'chain') {
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgb(${r},${g},${b})`;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        } else if (type === 'leather') {
+            const s = Math.random() * 12 + 6;
+            ctx.beginPath();
+            ctx.ellipse(x, y, s, s * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    tex.update();
+    // Dense texture on projected UVs
+    tex.uScale = 4.0;
+    tex.vScale = 4.0;
+    noiseCache.set(type, tex);
+    return tex;
+}
+
 function createMaterial(name, hexColor, type) {
     // Phase 9: Premium PBR Material Pipeline
     const mat = new BABYLON.PBRMaterial(name, scene);
@@ -221,16 +288,34 @@ function createMaterial(name, hexColor, type) {
     switch (type) {
         case 'plate':
         case 'metal':
-            mat.metallic = 1.0;
-            mat.roughness = 0.2;
+            mat.metallic = 0.8; // Boost metallic
+            mat.roughness = 0.25;
+            mat.environmentIntensity = 1.0; // High reflection
+            const pTex = getNoiseTexture('plate');
+            mat.bumpTexture = pTex;
+            mat.bumpTexture.level = 0.8; // Realistic micro-dents
+            mat.albedoTexture = pTex; // Dirt/Scratches multiplier
+            break;
+        case 'chain':
+            mat.metallic = 0.4;
+            mat.roughness = 0.5;
+            const cTex = getNoiseTexture('chain');
+            mat.bumpTexture = cTex;
+            mat.bumpTexture.level = 1.0;
+            mat.albedoTexture = cTex;
             break;
         case 'leather':
             mat.metallic = 0.1;
-            mat.roughness = 0.4;
+            mat.roughness = 0.6;
+            const lTex = getNoiseTexture('leather');
+            mat.bumpTexture = lTex;
+            mat.bumpTexture.level = 0.6;
+            mat.albedoTexture = lTex;
             break;
         case 'cloth':
             mat.metallic = 0.0;
             mat.roughness = 0.9;
+            mat.bumpTexture = getNoiseTexture('cloth');
             break;
         case 'eyes':
             mat.metallic = 0.0;
@@ -352,6 +437,12 @@ export async function loadHumanoidFbx() {
                 const indices = bodyMesh.getIndices();
                 const matricesIndices = bodyMesh.getVerticesData(BABYLON.VertexBuffer.MatricesIndicesKind);
                 const matricesWeights = bodyMesh.getVerticesData(BABYLON.VertexBuffer.MatricesWeightsKind);
+                const uvs = bodyMesh.getVerticesData(BABYLON.VertexBuffer.UVKind);
+                if (uvs) {
+                    console.log(`DIAGNOSTIC: UVs detected on ${bodyMesh.name} (${uvs.length / 2} pairs).`);
+                } else {
+                    console.error(`DIAGNOSTIC: NO UVS FOUND on ${bodyMesh.name}! Armor textures will fail without custom mapping.`);
+                }
                 const regionIds = [];
                 for (let i = 0; i < positions.length / 3; i++) {
                     let maxW = 0, mainB = -1;
@@ -373,7 +464,7 @@ export async function loadHumanoidFbx() {
                 }
 
                 window.humanoidData = {
-                    positions, indices, matricesIndices, matricesWeights, regionIds,
+                    positions, indices, matricesIndices, matricesWeights, regionIds, uvs,
                     bones: skeletonProxy.bones.map(b => ({ name: b.name }))
                 };
             }
@@ -523,23 +614,25 @@ export function setMorphology(shoulder, leg, arm, head, thickness = 1.0) {
 }
 
 // --- CLOTHING MESH GENERATOR ---
-function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null, includeBones = null) {
+function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matType, excludeBones = [], maxHeight = null, includeBones = null, smoothingIterations = 0) {
     if (!window.humanoidData || !scene) {
         console.warn("createClothingMesh: humanoidData missing.");
         return;
     }
     const data = window.humanoidData;
     const regionIds = data.regionIds;
-    console.log(`Generating Armor: ${name}, regions: ${targetRegions}, inflation: ${inflateAmount}`);
+    console.log(`Generating Armor: ${name}, regions: ${targetRegions}, inflation: ${inflateAmount}, smoothing: ${smoothingIterations}`);
 
     const baseMesh = window.humanoid || scene.getMeshByName("customHumanoid") || scene.meshes.find(m => m.name.toLowerCase().includes("body") || m.name.toLowerCase().includes("skin"));
 
     // 1. Filter Vertices & Build New Index Map
     const newPositions = [];
     const newIndices = [];
+    const newUvs = [];
     const newMatricesIndices = [];
     const newMatricesWeights = [];
     const indexMap = new Map();
+    const edgeCount = new Map();
 
     // Helper: Get Primary Bone Index for a vertex
     const getDominantBone = (oldIdx) => {
@@ -577,13 +670,13 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         // so we don't need additional offsets here.
 
         // Inflation: Small GLB units
-        const inf = inflateAmount * 0.012; // Boosted from 0.005 to 0.012 (approx 1cm per unit)
+        const inf = inflateAmount * 0.025; // Boosted to 0.025 to ensure it survives smoothing
 
         let nx = 0, ny = 0, nz = 0;
         if (baseMesh) {
             const normals = baseMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
             if (normals && oldIdx * 3 + 2 < normals.length) {
-                // Return to standard normal orientation for GLB/PBR sync
+                // Use standard normals (they typically point OUT on the GLB body)
                 nx = normals[oldIdx * 3];
                 ny = normals[oldIdx * 3 + 1];
                 nz = normals[oldIdx * 3 + 2];
@@ -593,6 +686,27 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         newPositions.push(px + nx * inf);
         newPositions.push(py + ny * inf);
         newPositions.push(pz + nz * inf);
+
+        // UVs: Fix for models missing native UV mapping
+        if (data.uvs) {
+            newUvs.push(data.uvs[oldIdx * 2]);
+            newUvs.push(data.uvs[oldIdx * 2 + 1]);
+        } else {
+            // SYNTHETIC UV PROJECTION (Tri-Planar / Box Mapping)
+            // Eliminate seams by picking plane based on dominant normal
+            const ax = Math.abs(nx);
+            const ay = Math.abs(ny);
+            const az = Math.abs(nz);
+            let u, v;
+            if (ay > ax && ay > az) {
+                u = px; v = pz; // Top/Bottom
+            } else if (ax > az) {
+                u = pz; v = py; // Sides
+            } else {
+                u = px; v = py; // Front/Back
+            }
+            newUvs.push(u * 0.5, v * 0.5);
+        }
 
         // Weights (Direct index use since we extracted from current skeleton)
         for (let k = 0; k < 4; k++) {
@@ -620,7 +734,8 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         if (targetRegions.includes(r1)) matchCount++;
         if (targetRegions.includes(r2)) matchCount++;
 
-        if (matchCount >= 2) {
+        // Gap Fix: Allow more inclusive triangles at boundaries
+        if (matchCount >= 1) {
             // BONE & HEIGHT FILTER
             const b0 = getDominantBone(i0);
             const b1 = getDominantBone(i1);
@@ -647,6 +762,11 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
             // If any vertex was clipped (returns -1), drop the triangle
             if (n0 !== -1 && n1 !== -1 && n2 !== -1) {
                 newIndices.push(n0, n1, n2);
+
+                // Edge Tracking (Path A: Geometric Rims)
+                const sorted = [n0, n1, n2].sort((a, b) => a - b);
+                const edges = [`${sorted[0]}-${sorted[1]}`, `${sorted[1]}-${sorted[2]}`, `${sorted[0]}-${sorted[2]}`];
+                edges.forEach(e => edgeCount.set(e, (edgeCount.get(e) || 0) + 1));
             }
         }
     }
@@ -663,15 +783,84 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
     const vertexData = new BABYLON.VertexData();
     vertexData.positions = newPositions;
     vertexData.indices = newIndices;
+    vertexData.uvs = newUvs;
     vertexData.matricesIndices = new Float32Array(newMatricesIndices);
     vertexData.matricesWeights = new Float32Array(newMatricesWeights);
 
-    // Normals
+    // Normals: RECOMPUTE FROM SCRATCH to hide anatomical details
     const calcNormals = [];
     BABYLON.VertexData.ComputeNormals(newPositions, newIndices, calcNormals);
     vertexData.normals = calcNormals;
 
     vertexData.applyToMesh(mesh);
+
+    // 3.5. APPLY SMOOTHING (Laplacian-lite)
+    if (smoothingIterations > 0) {
+        for (let iter = 0; iter < smoothingIterations; iter++) {
+            const positions = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+            const indices = mesh.getIndices();
+            const smoothed = new Float32Array(positions.length);
+            const neighborCount = new Int32Array(positions.length / 3);
+
+            // Accumulate neighbors
+            for (let i = 0; i < indices.length; i += 3) {
+                const i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
+                const parts = [i0, i1, i2];
+                for (let a = 0; a < 3; a++) {
+                    const me = parts[a], next = parts[(a + 1) % 3], prev = parts[(a + 2) % 3];
+                    smoothed[me * 3] += positions[next * 3] + positions[prev * 3];
+                    smoothed[me * 3 + 1] += positions[next * 3 + 1] + positions[prev * 3 + 1];
+                    smoothed[me * 3 + 2] += positions[next * 3 + 2] + positions[prev * 3 + 2];
+                    neighborCount[me] += 2;
+                }
+            }
+
+            // Average
+            for (let i = 0; i < neighborCount.length; i++) {
+                if (neighborCount[i] > 0) {
+                    const nx = (smoothed[i * 3] / neighborCount[i]);
+                    const ny = (smoothed[i * 3 + 1] / neighborCount[i]);
+                    const nz = (smoothed[i * 3 + 2] / neighborCount[i]);
+
+                    // Simple Taubin-lite: Mix the smooth position with the original to prevent excessive shrinking
+                    const blend = 0.5; // Reduced from 0.8 to preserve more volume
+                    positions[i * 3] = positions[i * 3] * (1 - blend) + nx * blend;
+                    positions[i * 3 + 1] = positions[i * 3 + 1] * (1 - blend) + ny * blend;
+                    positions[i * 3 + 2] = positions[i * 3 + 2] * (1 - blend) + nz * blend;
+                }
+            }
+            mesh.setVerticesData(BABYLON.VertexBuffer.PositionKind, positions);
+        }
+        // Final Normal refresh after smoothing
+        const normals = [];
+        const positions = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+        BABYLON.VertexData.ComputeNormals(positions, mesh.getIndices(), normals);
+
+        // --- 3.6 APPLY GEOMETRIC RIMS (Path A) ---
+        if (edgeCount.size > 0 && matType !== 'cloth' && matType !== 'skin') {
+            const boundaryVertices = new Set();
+            edgeCount.forEach((count, edge) => {
+                if (count === 1) {
+                    const [v1, v2] = edge.split('-').map(Number);
+                    boundaryVertices.add(v1);
+                    boundaryVertices.add(v2);
+                }
+            });
+
+            if (boundaryVertices.size > 0) {
+                const rimBoost = inflateAmount * 0.015; // Extra thickness at edges
+                boundaryVertices.forEach(vIdx => {
+                    positions[vIdx * 3] += normals[vIdx * 3] * rimBoost;
+                    positions[vIdx * 3 + 1] += normals[vIdx * 3 + 1] * rimBoost;
+                    positions[vIdx * 3 + 2] += normals[vIdx * 3 + 2] * rimBoost;
+                });
+                mesh.setVerticesData(BABYLON.VertexBuffer.PositionKind, positions);
+                // Final re-compute to ensure rims catch light correctly
+                BABYLON.VertexData.ComputeNormals(positions, mesh.getIndices(), normals);
+            }
+        }
+        mesh.setVerticesData(BABYLON.VertexBuffer.NormalKind, normals);
+    }
 
     // 4. Transform & Parenting Sync
     // Sync skeleton and bone influences
@@ -706,10 +895,9 @@ export function renderHumanoid(bodyParts) {
     lastBodyParts = bodyParts; // CACHE for post-load sync
 
     // Clean up old meshes AND skeletons
-    scene.meshes.filter(m => m.name.startsWith("cloth_")).forEach(m => m.dispose());
-    scene.meshes.filter(m => m.name.startsWith("armor_")).forEach(m => m.dispose()); // FIX: Cleanup new armor slots
-    scene.meshes.filter(m => m.name.startsWith("proc_")).forEach(m => m.dispose());
-    scene.meshes.filter(m => m.name.includes("_debug")).forEach(m => m.dispose());
+    const oldMeshes = scene.meshes.filter(m => m.name.startsWith("cloth_") || m.name.startsWith("armor_") || m.name.startsWith("proc_") || m.name.includes("_debug"));
+    console.log(`Disposing ${oldMeshes.length} old equipment meshes...`);
+    oldMeshes.forEach(m => m.dispose());
 
     clothingSkeletons.forEach(s => s.dispose());
     clothingSkeletons = [];
@@ -842,25 +1030,32 @@ export function renderHumanoid(bodyParts) {
         let exclusions = [];
         let includeBones = null;
 
+        let smoothing = 0;
+
         // 1. Determine Dimensions & Material based on TYPE
         if (type.includes("Plate")) {
-            inflation = 2.5;
+            inflation = 5.0; // Significant Bulge
+            smoothing = 2;   // HARDEN: Reduced from 5 to maintain "hammered" edges
             matType = 'metal';
         } else if (type.includes("Chain")) {
-            inflation = 1.6;
+            inflation = 2.4;
+            smoothing = 2;   // Light Smoothing to hide sharpest abs
             matType = 'chain';
         } else if (type.includes("Leather")) {
-            inflation = 1.4;
+            inflation = 2.8;
+            smoothing = 3;   // Moderate Smoothing for "Stiff" leather
             matType = 'leather';
         } else {
             // Default Cloth
             inflation = 1.2;
+            smoothing = 0;   // Keep cloth tight to body
             matType = 'cloth';
         }
 
         // 2. Determine Regions based on SLOT
         if (slot === "Torso") {
-            regions = [1];
+            regions = [1, 0, 4]; // Torso + Neck (0) + Hips (4) bleed
+            maxHeight = 188;     // Clip before hitting face
             includeBones = [
                 getBoneIndex(skeletonProxy, "Hips"),
                 getBoneIndex(skeletonProxy, "Spine"),
@@ -880,7 +1075,7 @@ export function renderHumanoid(bodyParts) {
             inflation += 0.5;
 
         } else if (slot === "Arms") {
-            regions = [2, 3];
+            regions = [1, 2, 3]; // Arm + Torso bleed
             includeBones = [
                 getBoneIndex(skeletonProxy, "LeftArm"),
                 getBoneIndex(skeletonProxy, "LeftForeArm"),
@@ -894,7 +1089,7 @@ export function renderHumanoid(bodyParts) {
             if (matType === 'cloth') exclusions = [];
 
         } else if (slot === "Feet") {
-            regions = [5, 6];
+            regions = [4, 5, 6]; // Feet + Leg bleed
             maxHeight = 0.5; // Normalized height for Boots (GLB space)
             if (type.includes("Plate")) inflation = 2.6;
             else if (type.includes("Cloth") || type.includes("Shoes")) inflation = 1.4;
@@ -918,7 +1113,7 @@ export function renderHumanoid(bodyParts) {
         if (regions.length > 0) {
             // Unique ID for the mesh
             const meshName = `armor_${slot}_${type}`;
-            createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones);
+            createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones, smoothing);
         }
     });
 

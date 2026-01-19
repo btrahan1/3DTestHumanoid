@@ -53,7 +53,7 @@ public class HumanoidRecipe
     public string ClothColor { get; set; } = "#3B5998"; // Denim Blue
     public string LeatherColor { get; set; } = "#3D2B1F"; // Dark Brown
     public string ChainColor { get; set; } = "#685948"; // Rusty Iron
-    public string MetalColor { get; set; } = "#C0C0C0"; // Silver
+    public string MetalColor { get; set; } = "#E0E0E0"; // Bright Silver
     public string WoodColor { get; set; } = "#5C4033"; // Wood
 }
 
