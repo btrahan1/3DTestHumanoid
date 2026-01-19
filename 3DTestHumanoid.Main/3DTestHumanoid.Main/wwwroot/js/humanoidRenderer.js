@@ -164,7 +164,7 @@ function updateMovement() {
 }
 
 // --- INITIALIZATION ---
-export function initCanvas(canvasId) {
+export async function initCanvas(canvasId) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
@@ -241,7 +241,7 @@ export function initCanvas(canvasId) {
     });
     window.addEventListener("resize", () => { engine.resize(); });
 
-    loadHumanoidFbx();
+    await loadHumanoidFbx();
 }
 
 // --- MATERIAL SYSTEM ---
@@ -249,6 +249,7 @@ const noiseCache = new Map();
 const eyeCache = new Map();
 
 function getEyeTexture(irisColorHex = "#336699") {
+    console.log(`getEyeTexture: drawing iris with ${irisColorHex}`);
     if (eyeCache.has(irisColorHex)) return eyeCache.get(irisColorHex);
 
     const size = 512;
@@ -408,6 +409,7 @@ function createMaterial(name, hexColor, type) {
         case 'eyes':
             mat.metallic = 0.0;
             mat.roughness = 0.1; // Extremely smooth
+            mat.albedoColor = new BABYLON.Color3(1, 1, 1);
             mat.albedoTexture = getEyeTexture(hexColor);
 
             // Wet look: High ClearCoat
@@ -618,17 +620,18 @@ export async function loadHumanoidFbx() {
             // RE-APPLY UI STATE
             const currentSkin = "#D2B48C";
             setSkinColor(currentSkin);
-
-            // RE-RENDER: Trigger equipment generation now that humanoidData is ready
-            if (lastBodyParts.length > 0) {
-                console.log(`Post-Load Equipment Render with ${lastBodyParts.length} parts...`);
-                renderHumanoid(lastBodyParts);
-            } else {
-                console.log("Post-Load: No cached bodyParts to render yet.");
-            }
-
+            setEyeColor("#3366cc"); // Initial color
         } catch (glbErr) {
+
             console.error("GLB Load Failed:", glbErr);
+        }
+
+        // RE-RENDER: Trigger equipment generation now that humanoidData is ready
+        if (typeof lastBodyParts !== 'undefined' && lastBodyParts.length > 0) {
+            console.log(`Post-Load Equipment Render with ${lastBodyParts.length} parts...`);
+            renderHumanoid(lastBodyParts);
+        } else {
+            console.log("Post-Load: No cached bodyParts to render yet.");
         }
     } catch (e) {
         console.error("Critical Error in loadHumanoidFbx:", e);
@@ -668,6 +671,26 @@ export function setSkinColor(hexColor) {
             }
         }
     });
+}
+
+export function setEyeColor(hexColor) {
+    if (!hexColor) return;
+    const cleanHex = hexColor.toLowerCase();
+    console.log(`setEyeColor (Force Re-Mat): ${cleanHex}`);
+
+    const updateEye = (eye) => {
+        if (eye) {
+            console.log(`Recreating material for: ${eye.name}`);
+            if (eye.material) eye.material.dispose();
+            // Use createMaterial which now sets white albedoColor for type 'eyes'
+            eye.material = createMaterial(`eyeMat_${eye.name}_${Date.now()}`, cleanHex, 'eyes');
+            eye.renderingGroupId = 1;
+        } else {
+            console.warn(`Eye mesh not found for update.`);
+        }
+    };
+    updateEye(window.leftEye);
+    updateEye(window.rightEye);
 }
 export function isMoving() { return animState === "walk"; }
 export function getCharacterPosition() {

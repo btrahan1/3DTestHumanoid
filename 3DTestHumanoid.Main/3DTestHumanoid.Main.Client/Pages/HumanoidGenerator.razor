@@ -84,44 +84,16 @@
                          </div>
                          <div class="col-6">
                             <label class="form-label x-small">Eye Color</label>
-                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyeColor" @bind:after="Render" />
+                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyeColor" @bind:event="oninput" @bind:after="Render" />
                          </div>
                     </div>
-                    <div class="row g-2 mb-3">
-                         <div class="col-6">
-                            <label class="form-label x-small">Eyebrow Color</label>
-                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyebrowColor" @bind:after="Render" />
-                         </div>
-                         <div class="col-6 d-flex align-items-end">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="chkEars" @bind="recipe.HasEars" @bind:after="Render">
-                                <label class="form-check-label x-small" for="chkEars">Has Ears</label>
-                            </div>
-                         </div>
-                    </div>
+                     <div class="row g-2 mb-3">
+                          <div class="col-6">
+                             <label class="form-label x-small">Eyebrow Color</label>
+                             <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyebrowColor" @bind:after="Render" />
+                          </div>
+                     </div>
 
-                    <div class="row g-1 border-top pt-2">
-                         <div class="col-6 mb-2">
-                            <label class="form-label x-small">Eye Depth: <strong>@recipe.EyeDepth.ToString("0.00")</strong></label>
-                            <input type="range" class="form-range" min="0.5" max="2.0" step="0.01"
-                                   @bind="recipe.EyeDepth" @bind:event="oninput" @onchange="Render" />
-                        </div>
-                        <div class="col-6 mb-2">
-                            <label class="form-label x-small">Nose Depth: <strong>@recipe.NoseDepth.ToString("0.00")</strong></label>
-                            <input type="range" class="form-range" min="0.5" max="2.0" step="0.01"
-                                   @bind="recipe.NoseDepth" @bind:event="oninput" @onchange="Render" />
-                        </div>
-                        <div class="col-6 mb-2">
-                            <label class="form-label x-small">Brow Depth: <strong>@recipe.BrowDepth.ToString("0.00")</strong></label>
-                            <input type="range" class="form-range" min="0.5" max="2.0" step="0.01"
-                                   @bind="recipe.BrowDepth" @bind:event="oninput" @onchange="Render" />
-                        </div>
-                        <div class="col-6 mb-2">
-                            <label class="form-label x-small">Mouth Depth: <strong>@recipe.MouthDepth.ToString("0.00")</strong></label>
-                            <input type="range" class="form-range" min="0.5" max="2.0" step="0.01"
-                                   @bind="recipe.MouthDepth" @bind:event="oninput" @onchange="Render" />
-                        </div>
-                    </div>
                 </div>
             </details>
 
@@ -365,6 +337,7 @@
 
             await module.InvokeVoidAsync("setMorphology", recipe.ShoulderWidth, recipe.LegLength, recipe.ArmLength, recipe.HeadSize, thickness);
             await module.InvokeVoidAsync("setSkinColor", recipe.SkinColor);
+            await module.InvokeVoidAsync("setEyeColor", recipe.EyeColor);
         }
     }
 
