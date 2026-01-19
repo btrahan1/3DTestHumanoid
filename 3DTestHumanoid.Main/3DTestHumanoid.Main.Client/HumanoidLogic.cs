@@ -24,6 +24,7 @@ public class HumanoidRecipe
 
     // Clothing & Armor Slots
     public string HeadSlot { get; set; } = "None";   // None, LeatherHelm, ChainHood, PlateHelm
+    public string CapSlot { get; set; } = "None";    // None, LeatherCap
     public string ShouldersSlot { get; set; } = "None"; // None, LeatherPauldrons, PlatePauldrons
     public string TorsoSlot { get; set; } = "None"; // None, Shirt, LeatherVest, Chainmail, PlateArmor
     public string ArmsSlot { get; set; } = "None"; // None, Sleeves, Bracers
@@ -37,6 +38,7 @@ public class HumanoidRecipe
     public string EyeColor { get; set; } = "#0000FF"; // Blue
     public string EyebrowColor { get; set; } = "#2C2C2C"; // Match Hair default
     public string HairColor { get; set; } = "#2C2C2C"; // Black/Dark Grey
+    public float HairVolume { get; set; } = 0.035f; // Default scale factor (between 0.02 and 0.08)
     public bool HasEars { get; set; } = true; // Default Ears On
     
     // Face Calibration (1.0 = Default)
@@ -185,17 +187,20 @@ public static class HumanoidSolver
         }
         */
 
-        /*
         if (!string.Equals(recipe.HairStyle, "None", StringComparison.OrdinalIgnoreCase))
         {
-             parts.Add(new BodyPartDto { Name = $"Face_Hair_{recipe.HairStyle}", Color = recipe.HairColor });
+             // Pass HairVolume in Radii[0]
+             parts.Add(new BodyPartDto { 
+                 Name = $"Face_Hair_{recipe.HairStyle}", 
+                 Color = recipe.HairColor,
+                 Radii = new float[] { recipe.HairVolume } 
+             });
         }
 
         if (!string.Equals(recipe.BeardStyle, "None", StringComparison.OrdinalIgnoreCase))
         {
              parts.Add(new BodyPartDto { Name = $"Face_Beard_{recipe.BeardStyle}", Color = recipe.HairColor });
         }
-        */
         
         // We only pass flags to the renderer now. 
         // The Geometry is handled by Mesh Inflation in JS (Option B).
@@ -206,8 +211,15 @@ public static class HumanoidSolver
              if (recipe.HeadSlot.Contains("Leather")) col = recipe.LeatherColor;
              if (recipe.HeadSlot.Contains("Cloth") || recipe.HeadSlot.Contains("Hood")) col = recipe.ClothColor;
              if (recipe.HeadSlot.Contains("Chain")) col = recipe.ChainColor;
+             if (recipe.HeadSlot.Contains("Cap")) col = recipe.LeatherColor;
              
              parts.Add(new BodyPartDto { Name = $"Head_{recipe.HeadSlot}", Color = col });
+        }
+
+        if (!string.Equals(recipe.CapSlot, "None", StringComparison.OrdinalIgnoreCase))
+        {
+             // Cap uses LeatherColor by default for now
+             parts.Add(new BodyPartDto { Name = $"Cap_{recipe.CapSlot}", Color = recipe.LeatherColor });
         }
 
         if (!string.Equals(recipe.ShouldersSlot, "None", StringComparison.OrdinalIgnoreCase))

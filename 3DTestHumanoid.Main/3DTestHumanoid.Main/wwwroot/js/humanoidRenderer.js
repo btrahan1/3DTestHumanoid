@@ -247,9 +247,110 @@ export async function initCanvas(canvasId) {
 // --- MATERIAL SYSTEM ---
 const noiseCache = new Map();
 const eyeCache = new Map();
+const eyebrowCache = new Map();
+const hairCache = new Map();
+
+function getEyebrowTexture(colorHex = "#2C2C2C") {
+    // Force redraw for debugging/real-time sync
+    // if (eyebrowCache.has(colorHex)) return eyebrowCache.get(colorHex);
+
+    const size = 512;
+    const tex = new BABYLON.DynamicTexture(`eyebrow_${colorHex}`, { width: size, height: size / 2 }, scene);
+    tex.hasAlpha = true;
+    const ctx = tex.getContext();
+
+    // Transparent background
+    ctx.clearRect(0, 0, size, size / 2);
+
+    // Draw Eyebrow Strands
+    ctx.strokeStyle = colorHex;
+    ctx.lineCap = "round";
+
+    const startX = size * 0.1;
+    const endX = size * 0.9;
+    const baseY = size * 0.45; // Lower in the texture
+
+    for (let i = 0; i < 400; i++) { // Even higher density for "bushy" look
+        const t = i / 400;
+        const x = startX + t * (endX - startX) + (Math.random() * 20 - 10);
+
+        // Anatomical Arch: Natural, subtle curve
+        const arch = Math.sin(t * Math.PI) * 25;
+        const strandHeight = 35 + (Math.random() * 30); // 50% taller strands
+        const y = baseY - arch + (Math.random() * 25 - 12); // Wider vertical jitter
+
+        ctx.beginPath();
+        ctx.globalAlpha = 0.7 + (Math.random() * 0.3);
+        ctx.lineWidth = 6.0 + (Math.random() * 6.0); // Bolder strands
+
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(
+            x + (t < 0.5 ? 5 : -5), y - strandHeight,
+            x + (t < 0.5 ? 10 : -10), y - strandHeight * 0.3
+        );
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
+
+    tex.update();
+    eyebrowCache.set(colorHex, tex);
+    return tex;
+}
+
+function getHairTexture(colorHex = "#2C2C2C") {
+    const cacheKey = `hair_${colorHex}`;
+    if (hairCache.has(cacheKey)) return hairCache.get(cacheKey);
+
+    const size = 1024; // Higher res for head coverage
+    const tex = new BABYLON.DynamicTexture(cacheKey, size, scene);
+    tex.hasAlpha = true;
+    const ctx = tex.getContext();
+
+    // 1. Base Density Layer (Scalp Block)
+    // Fill background so it's not see-through patchy
+    ctx.fillStyle = colorHex;
+    ctx.globalAlpha = 1.0;
+    ctx.fillRect(0, 0, size, size);
+
+    // Add noise for texture
+    for (let i = 0; i < 5000; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        ctx.globalAlpha = 0.1 + Math.random() * 0.2;
+        ctx.fillRect(x, y, 2, 2);
+    }
+
+    // 2. Strand Layers
+    ctx.strokeStyle = colorHex;
+    ctx.lineCap = "round";
+
+    for (let i = 0; i < 4000; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+
+        // HIGHER OPACITY & THICKNESS (Lessons from Eyebrows)
+        ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+        ctx.lineWidth = 4 + Math.random() * 6; // 4px to 10px thick
+
+        const length = 10 + Math.random() * 20;
+        const angle = Math.random() * Math.PI * 2;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(
+            x + Math.cos(angle) * length,
+            y + Math.sin(angle) * length
+        );
+        ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1.0;
+    tex.update();
+    hairCache.set(cacheKey, tex);
+    return tex;
+}
 
 function getEyeTexture(irisColorHex = "#336699") {
-    console.log(`getEyeTexture: drawing iris with ${irisColorHex}`);
     if (eyeCache.has(irisColorHex)) return eyeCache.get(irisColorHex);
 
     const size = 512;
@@ -421,7 +522,31 @@ function createMaterial(name, hexColor, type) {
             mat.subSurface.isScatteringEnabled = true;
             mat.subSurface.tintColor = new BABYLON.Color3(1, 0.8, 0.8);
             break;
+        case 'eyebrows':
+            mat.metallic = 0.0;
+            mat.roughness = 0.8;
+            mat.albedoColor = new BABYLON.Color3(1, 1, 1);
+            mat.albedoTexture = getEyebrowTexture(hexColor.toLowerCase());
+            mat.useAlphaFromAlbedoTexture = true;
+            mat.transparencyMode = BABYLON.PBRMaterial.PBRMETHOD_ALPHATEST;
+            mat.alphaCutOff = 0.05; // Low cutoff for fine strands
+            break;
+        case 'hair':
+            mat.metallic = 0.0;
+            mat.roughness = 0.4;
+            mat.albedoColor = new BABYLON.Color3(1, 1, 1);
+            mat.albedoTexture = getHairTexture(hexColor.toLowerCase());
+            mat.useAlphaFromAlbedoTexture = true;
+            mat.transparencyMode = BABYLON.PBRMaterial.PBRMETHOD_ALPHATEST;
+            mat.alphaCutOff = 0.1;
+
+            // Anisotropy for realistic hair sheen
+            mat.anisotropy.isEnabled = true;
+            mat.anisotropy.intensity = 0.8;
+            mat.anisotropy.direction = new BABYLON.Vector3(0, 1, 0);
+            break;
         case 'skin':
+
             mat.metallic = 0.0;
             mat.roughness = 0.7; // Soft skin
             // Subsurface simulation (pseudo)
@@ -613,6 +738,27 @@ export async function loadHumanoidFbx() {
                     window.leftEye = createEyeOverlay(true);
                     window.rightEye = createEyeOverlay(false);
                     console.log("Procedural Eye Overlays anchored to Head bone.");
+
+                    const createEyebrowOverlay = (isLeft) => {
+                        const brow = BABYLON.MeshBuilder.CreatePlane(`eyebrow_overlay_${isLeft ? 'L' : 'R'}`, { width: 0.18, height: 0.12 }, scene);
+                        brow.parent = headNode;
+
+                        // Positioned on the brow ridge, pressed against the forehead
+                        brow.position.x = isLeft ? -0.16 : 0.17;
+                        brow.position.y = 0.64;
+                        brow.position.z = 0.58; // Pulled back significantly (0.66 -> 0.58)
+
+                        brow.rotation.y = isLeft ? 0.2 : -0.2;
+                        brow.rotation.z = isLeft ? 0.05 : -0.05;
+                        brow.material = createMaterial(`browMat_${isLeft}`, "#2C2C2C", 'eyebrows');
+                        brow.renderingGroupId = 1;
+                        return brow;
+                    };
+
+                    if (window.leftEyebrow) window.leftEyebrow.dispose();
+                    if (window.rightEyebrow) window.rightEyebrow.dispose();
+                    window.leftEyebrow = createEyebrowOverlay(true);
+                    window.rightEyebrow = createEyebrowOverlay(false);
                 }
             }
             console.log("Perfect Anatomical Base Loaded. humanoidData status:", !!window.humanoidData);
@@ -676,22 +822,57 @@ export function setSkinColor(hexColor) {
 export function setEyeColor(hexColor) {
     if (!hexColor) return;
     const cleanHex = hexColor.toLowerCase();
-    console.log(`setEyeColor (Force Re-Mat): ${cleanHex}`);
 
     const updateEye = (eye) => {
         if (eye) {
-            console.log(`Recreating material for: ${eye.name}`);
             if (eye.material) eye.material.dispose();
             // Use createMaterial which now sets white albedoColor for type 'eyes'
             eye.material = createMaterial(`eyeMat_${eye.name}_${Date.now()}`, cleanHex, 'eyes');
             eye.renderingGroupId = 1;
-        } else {
-            console.warn(`Eye mesh not found for update.`);
         }
     };
     updateEye(window.leftEye);
     updateEye(window.rightEye);
 }
+
+export function setEyebrowColor(hexColor) {
+    if (!hexColor) return;
+    const cleanHex = hexColor.toLowerCase();
+    eyebrowCache.clear(); // Force texture redraw
+    console.log(`setEyebrowColor call: ${cleanHex}`);
+
+    const updateBrow = (brow) => {
+        if (brow) {
+            console.log(`Updating eyebrow mesh: ${brow.name}`);
+            if (brow.material) {
+                console.log(`Disposing old eyebrow material: ${brow.material.name}`);
+                brow.material.dispose();
+            }
+            brow.material = createMaterial(`browMat_${brow.name}_${Date.now()}`, cleanHex, 'eyebrows');
+            brow.renderingGroupId = 1;
+        } else {
+            console.warn(`Eyebrow mesh not found for update.`);
+        }
+    };
+    updateBrow(window.leftEyebrow);
+    updateBrow(window.rightEyebrow);
+}
+
+export function setHairColor(hexColor) {
+    if (!hexColor) return;
+    const cleanHex = hexColor.toLowerCase();
+    hairCache.clear();
+    console.log(`setHairColor hit: ${cleanHex}`);
+
+    const hairMesh = scene.getMeshByName("face_hair_cap");
+    if (hairMesh) {
+        if (hairMesh.material) hairMesh.material.dispose();
+        hairMesh.material = createMaterial(`hairMat_${Date.now()}`, cleanHex, 'hair');
+    } else {
+        console.warn("Hair cap mesh not found for color update.");
+    }
+}
+
 export function isMoving() { return animState === "walk"; }
 export function getCharacterPosition() {
     return { x: characterRoot.position.x, y: characterRoot.position.y, z: characterRoot.position.z };
@@ -1070,8 +1251,8 @@ export function renderHumanoid(bodyParts) {
         bodyParts.forEach(part => {
             if (!part.path || part.path.length < 2) return;
 
-            // SKIP FACE PARTS (Handled by renderFace for Bone attachment)
-            if (part.name.startsWith("Face_")) return;
+            // SKIP FACE PARTS and Custom CAP (Handled by renderFace for Bone attachment)
+            if (part.name.startsWith("Face_") || part.name.startsWith("Cap_")) return;
 
             // Convert DTO Path to Vector3 and NORMALIZE to GLB space
             const norm = 2.0 / 175.0;
@@ -1332,6 +1513,15 @@ export function renderHumanoid(bodyParts) {
             regions = [0]; // Head
             if (type.includes("Cloth")) inflation = 1.25;
             else inflation = 1.5;
+
+        } else if (slot === "Cap") {
+            regions = [0]; // Head
+            inflation = 1.25; // Snug fit (Cloth/Leather default)
+            matType = 'leather';
+            // CLIPPING: Start high up (Crown only)
+            // Estimation: Neck=8.0 -> Mid-Head=8.8
+            // 8.8 was "Small Patch". 
+            minHeight = 8.5;
         }
 
         // 3. GENERATE
@@ -1378,6 +1568,8 @@ export function renderFace(bodyParts) {
     const earPart = bodyParts.find(p => p.name === "Face_Ears");
     const hairPart = bodyParts.find(p => p.name.startsWith("Face_Hair_"));
     const beardPart = bodyParts.find(p => p.name.startsWith("Face_Beard_"));
+    const capPart = bodyParts.find(p => p.name.startsWith("Cap_"));
+
 
     // --- 1. EYES (Reference Only: C# sets position, JS renders high-poly) ---
     const eyeColorHex = eyePart ? eyePart.color : "#0000FF";
@@ -1536,47 +1728,75 @@ export function renderFace(bodyParts) {
 
     // --- 6. HAIR ---
     if (hairPart) {
-        const style = hairPart.name.replace("Face_Hair_", "");
+        console.log(`renderFace: Found hairPart ${hairPart.name}`);
+        // Normalize style to Title Case or check case-insensitively?
+        // Let's just grab the suffix.
+        const rawStyle = hairPart.name.replace("Face_Hair_", "");
+        // Ensure we match "Short", "Long", "Mohawk" regardless of partial casing issues if any
+
         const hairColor = BABYLON.Color3.FromHexString(hairPart.color);
         const hairMat = new BABYLON.StandardMaterial("hairMat", scene);
         hairMat.diffuseColor = hairColor;
         hairMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); // Low shine
 
-        if (style === "Short") {
-            const hair = BABYLON.MeshBuilder.CreateSphere("face_hair", { diameterX: 23, diameterY: 23, diameterZ: 25, slice: 0.5 }, scene);
-            hair.material = hairMat;
-            hair.parent = faceRoot;
-            hair.position = new BABYLON.Vector3(0, 1, 1);
-            hair.rotation.x = Math.PI;
-        } else if (style === "Long") {
-            const hair = BABYLON.MeshBuilder.CreateSphere("face_hair_top", { diameter: 24, slice: 0.6 }, scene);
-            hair.material = hairMat;
-            hair.parent = faceRoot;
-            hair.position = new BABYLON.Vector3(0, 1, 0);
-            hair.rotation.x = Math.PI;
+        // SCALING: Solver units (175) -> Scene units (2.0)
+        // READ FROM RECIPE (passed via Radii[0] in HumanoidLogic.cs)
+        // Default to 0.035 if missing
+        const s = (hairPart.radii && hairPart.radii.length > 0) ? hairPart.radii[0] : 0.035;
+        console.log(`Hair Volume Scale: ${s}`);
 
-            const hairBack = BABYLON.MeshBuilder.CreateBox("face_hair_back", { width: 22, height: 35, depth: 4 }, scene);
-            hairBack.material = hairMat;
-            hairBack.parent = faceRoot;
-            hairBack.position = new BABYLON.Vector3(0, -12, -8);
-        } else if (style === "Mohawk") {
+        if (rawStyle === "Short") {
+            // NEW "CAP" GEOMETRY: 
+            // Previous was Flattened (Bowl). New is Taller (Egg/Vertical sides).
+            // Keeps sides straighter to avoid "Bicycle Helmet" curve-in.
+            const hair = BABYLON.MeshBuilder.CreateSphere("face_hair_cap", {
+                diameterX: 24 * s, // Slightly narrower
+                diameterY: 35 * s, // SIGNIFICANTLY TALLER (Egg shape)
+                diameterZ: 26 * s, // Slightly narrower
+                slice: 0.5         // Hemisphere (Equator cut)
+            }, scene);
+            hair.material = createMaterial("hairMat_cap", hairPart.color, 'hair');
+            hair.parent = faceRoot;
+
+            // dynamicY for TALL geometry
+            // Taller sphere needs to sit lower to cover skull
+            const dynamicY = 0.55 - (s * 1.5);
+            hair.position = new BABYLON.Vector3(0, dynamicY, 0.05);
+            // hair.rotation.x = Math.PI;
+            // hair.rotation.x = Math.PI;
+        } else if (rawStyle === "Long") {
+            console.log("Creating Long Hair Cap...");
+            const hair = BABYLON.MeshBuilder.CreateSphere("face_hair_cap", { diameter: 26 * s, slice: 0.6 }, scene);
+            hair.material = createMaterial("hairMat_cap", hairPart.color, 'hair');
+            hair.parent = faceRoot;
+
+            // Dynamic Positioning (same as Short)
+            const dynamicY = 0.72 - (s * 0.8);
+            hair.position = new BABYLON.Vector3(0, dynamicY, 0.05);
+            // hair.rotation.x = Math.PI;
+        } else if (rawStyle === "Mohawk") {
+            console.log("Creating Mohawk...");
             // Replicating "Swoop" style from image? 
             // Let's stick to Mohawk but make it more volume-based
-            const hair = BABYLON.MeshBuilder.CreateTube("face_hair", {
+            const hair = BABYLON.MeshBuilder.CreateTube("face_hair_cap", {
                 path: [
-                    new BABYLON.Vector3(0, 10, 8),
-                    new BABYLON.Vector3(0, 14, 0),
-                    new BABYLON.Vector3(0, 8, -8)
+                    new BABYLON.Vector3(0, 10 * s, 8 * s),
+                    new BABYLON.Vector3(0, 14 * s, 0),
+                    new BABYLON.Vector3(0, 8 * s, -8 * s)
                 ],
-                radius: 3,
+                radius: 3 * s,
                 cap: BABYLON.Mesh.CAP_ROUND
             }, scene);
-            hair.material = hairMat;
+            hair.material = createMaterial("hairMat_cap", hairPart.color, 'hair');
             hair.parent = faceRoot;
         }
     }
 
-    // --- 7. BEARD ---
+    // --- 7. CAP (ARMOR) ---
+    // REMOVED (Handled by Generic Armor Loop now)
+
+
+    // --- 8. BEARD ---
     if (beardPart) {
         const style = beardPart.name.replace("Face_Beard_", "");
         const beardColor = BABYLON.Color3.FromHexString(beardPart.color);

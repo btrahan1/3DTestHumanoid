@@ -80,7 +80,7 @@
                     <div class="row g-2 mb-3">
                          <div class="col-6">
                             <label class="form-label x-small">Hair Color</label>
-                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.HairColor" @bind:after="Render" />
+                            <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.HairColor" @bind:event="oninput" @bind:after="Render" />
                          </div>
                          <div class="col-6">
                             <label class="form-label x-small">Eye Color</label>
@@ -90,8 +90,16 @@
                      <div class="row g-2 mb-3">
                           <div class="col-6">
                              <label class="form-label x-small">Eyebrow Color</label>
-                             <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyebrowColor" @bind:after="Render" />
+                             <input type="color" class="form-control form-control-sm form-control-color w-100" @bind="recipe.EyebrowColor" @bind:event="oninput" @bind:after="Render" />
                           </div>
+                     </div>
+                     
+                     <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label x-small">Hair Volume (@recipe.HairVolume.ToString("0.000"))</label>
+                            <input type="range" class="form-range" min="0.01" max="0.10" step="0.001" 
+                                   @bind="recipe.HairVolume" @bind:event="oninput" @bind:after="Render" />
+                        </div>
                      </div>
 
                 </div>
@@ -120,6 +128,13 @@
                             <option value="LeatherHelm">Leather Helm</option>
                             <option value="ChainHood">Chain Hood</option>
                             <option value="PlateHelm">Plate Helm</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label x-small">Cap</label>
+                        <select class="form-select form-select-sm" @bind="recipe.CapSlot" @bind:after="Render">
+                            <option value="None">None</option>
+                            <option value="LeatherCap">Leather Cap</option>
                         </select>
                     </div>
                     <div class="mb-2">
@@ -338,6 +353,8 @@
             await module.InvokeVoidAsync("setMorphology", recipe.ShoulderWidth, recipe.LegLength, recipe.ArmLength, recipe.HeadSize, thickness);
             await module.InvokeVoidAsync("setSkinColor", recipe.SkinColor);
             await module.InvokeVoidAsync("setEyeColor", recipe.EyeColor);
+            await module.InvokeVoidAsync("setEyebrowColor", recipe.EyebrowColor);
+            await module.InvokeVoidAsync("setHairColor", recipe.HairColor);
         }
     }
 
