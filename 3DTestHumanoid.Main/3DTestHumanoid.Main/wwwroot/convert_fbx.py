@@ -26,37 +26,76 @@ def parse_fbx_to_json(fbx_path, json_path):
     vertices = []
     indices = []
     
-    with open(fbx_path, 'r') as f:
+    # Read as binary first to check Kaydara, then try to find data
+    with open(fbx_path, 'rb') as f:
+        head = f.read(20)
+        is_binary = b"Kaydara" in head
+    
+    # We need a robust parser. Since we are in a script, let's use a simpler "find the array" approach
+    # for positions and indices that works for both.
+    # --- GEOMETRY-NODE PARSER (Surgical Pairing) ---
+    all_vertices = []
+    all_indices = []
+    
+    with open(fbx_path, 'rb') as f:
         content = f.read()
+
+    # Find each Geometry: node as a starting point
+    # We use a lenient search for maximum robustness
+    geom_starts = [m.start() for m in re.finditer(b"Geometry:", content)]
     
-    # 1. Extract Vertices
-    v_match = re.search(r'Vertices:\s*\*(\d+)\s*\{([^}]+)\}', content, re.DOTALL)
-    if v_match:
-        raw_v = v_match.group(2)
-        raw_v = raw_v.replace('a:', '').replace('\n', ' ').replace(',', ' ')
-        vertices = [float(x) for x in raw_v.split()]
-        print(f"Found {len(vertices)//3} vertices")
+    if not geom_starts:
+        print("ERROR: Could not find any Geometry nodes. Check if file is ASCII.")
+        return
+
+    print(f"Found {len(geom_starts)} geometry nodes. Extracting pairs...")
     
-    # 2. Extract Indices
-    i_match = re.search(r'PolygonVertexIndex:\s*\*(\d+)\s*\{([^}]+)\}', content, re.DOTALL)
-    if i_match:
-        raw_i = i_match.group(2)
-        raw_i = raw_i.replace('a:', '').replace('\n', ' ').replace(',', ' ')
-        raw_indices = [int(x) for x in raw_i.split()]
+    v_master_offset = 0
+    all_material_ids = []
+    num_regex = b"[-+]?(?:\\d*\\.\\d+|\\d+)(?:[eE][-+]?\\d+)?"
+
+    for part_idx, gs in enumerate(geom_starts):
+        # Find next Vertices and PolygonVertexIndex AFTER this Geometry start
+        # but BEFORE the next Geometry start
+        next_gs = content.find(b"Geometry:", gs + 1)
+        if next_gs == -1: next_gs = len(content)
         
-        tri_indices = []
-        face = []
-        for idx in raw_indices:
-            if idx < 0:
-                face.append(~idx)
-                if len(face) >= 3:
-                    v0 = face[0]
-                    for i in range(1, len(face)-1):
-                        tri_indices.extend([v0, face[i], face[i+1]])
-                face = []
-            else:
-                face.append(idx)
-        indices = tri_indices
+        chunk = content[gs:next_gs]
+        
+        # We need both Vertices and Indices in this chunk
+        v_match = re.search(b"Vertices[^{]*{([^}]+)}", chunk, re.DOTALL)
+        i_match = re.search(b"PolygonVertexIndex[^{]*{([^}]+)}", chunk, re.DOTALL)
+        
+        if v_match and i_match:
+            print(f"Applying Mesh Part {part_idx} at offset {gs}...")
+            v_list = [float(x) for x in re.findall(num_regex, v_match.group(1))]
+            i_list = [int(x) for x in re.findall(num_regex, i_match.group(1))]
+            
+            all_vertices.extend(v_list)
+            
+            # Tag all vertices in this part with their part_idx
+            all_material_ids.extend([part_idx] * (len(v_list) // 3))
+            
+            tri_indices = []
+            face = []
+            for idx in i_list:
+                if idx < 0:
+                    face.append(~idx + v_master_offset)
+                    if len(face) >= 3:
+                        v0 = face[0]
+                        for i in range(1, len(face)-1):
+                            tri_indices.extend([v0, face[i], face[i+1]])
+                    face = []
+                else:
+                    face.append(idx + v_master_offset)
+            
+            all_indices.extend(tri_indices)
+            v_master_offset += (len(v_list) // 3)
+
+    vertices = all_vertices
+    indices = all_indices
+    material_ids = all_material_ids
+    print(f"Final Merged Geometry: {len(vertices)//3} vertices, {len(indices)//3} triangles.")
 
     # 3. Precision Skeleton (Aligned to Y:177, X:89)
     # Moved pivots closer to body (X=18) to avoid "gap" webbing
@@ -112,6 +151,21 @@ def parse_fbx_to_json(fbx_path, json_path):
     region_ids = []
     
     num_verts = len(vertices) // 3
+    
+    # --- A-POSE BAKE SETTINGS ---
+    # Drop ONLY arms (6-8, 10-12). Keep Shoulders (5, 9) static to avoid chest ripping.
+    arm_angle = math.radians(-45)
+    arm_pivot_l = (18, 142, 0)
+    arm_pivot_r = (-18, 142, 0)
+
+    def rotate_point_z(p, pivot, angle):
+        px, py, pz = p[0] - pivot[0], p[1] - pivot[1], p[2] - pivot[2]
+        rx = px * math.cos(angle) - py * math.sin(angle)
+        ry = px * math.sin(angle) + py * math.cos(angle)
+        return rx + pivot[0], ry + pivot[1], pz + pivot[2]
+
+    new_vertices = []
+
     for v_idx in range(num_verts):
         vx, vy, vz = vertices[v_idx*3 : v_idx*3+3]
         p = (vx, vy, vz)
@@ -126,21 +180,29 @@ def parse_fbx_to_json(fbx_path, json_path):
         p_weights = []
         sum_p = 0
         for b_id, d in closest4:
-            # EXCLUSION ZONE: If it's an arm bone (6-12) but the vertex is inside the torso (abs(vx) < 22), ignore it.
-            # Bone 5/9 are shoulders which can bridge, but Arm 6/10 should NEVER grab the chest.
             if b_id in [6, 7, 8, 10, 11, 12] and abs(vx) < 22:
-                d += 1000.0 # Effectively disqualifies it
+                d += 1000.0
                 
             power = 4.0
-            w = 1.0 / (d**power + 25.0) # Larger constant for volume preservation
+            w = 1.0 / (d**power + 25.0)
             
-            # TORSO BIAS: Favor Spine/Shoulder for central vertices
             if b_id in [1, 2, 5, 9] and abs(vx) < 25:
                 w *= 5.0
                 
             p_weights.append((b_id, w))
             sum_p += w
             
+        # BAKE A-POSE INTO VERTICES
+        # Only bake if dominant bone is lower arm (6-8 or 10-12)
+        # We keep the Shoulder (5, 9) vertices static so they act as the "bridge"
+        best_b = max(p_weights, key=lambda x: x[1])[0]
+        if best_b in [6, 7, 8]:
+            p = rotate_point_z(p, arm_pivot_l, arm_angle)
+        elif best_b in [10, 11, 12]:
+            p = rotate_point_z(p, arm_pivot_r, -arm_angle)
+
+        new_vertices.extend([p[0], p[1], p[2]])
+
         v_indices = []
         v_weights = []
         for b_id, w in p_weights:
@@ -150,15 +212,16 @@ def parse_fbx_to_json(fbx_path, json_path):
         m_indices.extend(v_indices)
         m_weights.extend(v_weights)
         
-        # Calculate Dominant Region
-        best_bone = -1
-        best_weight = -1.0
-        for b_id, w in p_weights: # Use p_weights (raw) for comparison
-            if w > best_weight:
-                best_weight = w
-                best_bone = b_id
-        
-        region_ids.append(get_region_id(best_bone))
+        region_ids.append(get_region_id(best_b))
+
+    vertices = new_vertices 
+
+    # BAKE A-POSE INTO BONES (Only Arm hierarchy)
+    for j in joints:
+        if j["name"] in ["LArm", "LForeArm", "LHand"]:
+             j["pos"] = list(rotate_point_z(j["pos"], arm_pivot_l, arm_angle))
+        if j["name"] in ["RArm", "RForeArm", "RHand"]:
+             j["pos"] = list(rotate_point_z(j["pos"], arm_pivot_r, -arm_angle))
 
     bone_data = []
     for j in joints:
@@ -181,7 +244,8 @@ def parse_fbx_to_json(fbx_path, json_path):
         "bones": bone_data,
         "matricesIndices": m_indices,
         "matricesWeights": m_weights,
-        "regionIds": region_ids
+        "regionIds": region_ids,
+        "materialIds": material_ids
     }
     
     with open(json_path, 'w') as f:
@@ -189,4 +253,5 @@ def parse_fbx_to_json(fbx_path, json_path):
     print(f"Saved to {json_path}")
 
 if __name__ == "__main__":
-    parse_fbx_to_json("testhuman.fbx", "humanoid_data.json")
+    # Point to the High-Fidelity Realistic model (TestModel.fbx)
+    parse_fbx_to_json("TestModel.fbx", "humanoid_data.json")
