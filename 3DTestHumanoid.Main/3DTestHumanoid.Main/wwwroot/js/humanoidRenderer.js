@@ -154,6 +154,9 @@ export function initCanvas(canvasId) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
+    // Disable context menu to allow Right-Click dragging (Panning)
+    canvas.oncontextmenu = (e) => e.preventDefault();
+
     if (engine) engine.dispose();
 
     engine = new BABYLON.Engine(canvas, true);
@@ -165,18 +168,27 @@ export function initCanvas(canvasId) {
     characterRoot = new BABYLON.TransformNode("characterRoot", scene);
 
     // Camera
-    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 300, new BABYLON.Vector3(0, 90, 0), scene);
+    // Camera: Front View, Level Angle, and Wide Radius for Full Framing
+    const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2, 900, BABYLON.Vector3.Zero(), scene);
 
-    // Create a target pivot so the camera follows the character but looks at the chest
-    const cameraTargetNode = new BABYLON.TransformNode("cameraTargetNode", scene);
-    cameraTargetNode.parent = characterRoot;
-    // We use raw units (meters) because they get multiplied by characterRoot.scaling
-    cameraTargetNode.position.y = 0.9; // Approx chest height in raw GLB units
-    camera.lockedTarget = cameraTargetNode;
+    // Target y=5.8 (Upper Chest) - Using Vector3 directly to allow unrestricted panning
+    camera.setTarget(new BABYLON.Vector3(0, 5.8, 0));
 
     camera.attachControl(canvas, true);
+    camera.wheelPrecision = 2.0; // Smoother, faster zoom
     camera.lowerRadiusLimit = 50;
-    camera.upperRadiusLimit = 1000;
+    camera.upperRadiusLimit = 2000;
+
+    // Right-Click Panning (Scene Drag)
+    camera.panningButton = 2; // Right Mouse Button
+    camera.panningSensibility = 25; // Lower = Faster. Adjusted for a "Snappy" feel.
+    camera.panningInertia = 0.9;
+    camera.useNaturalPinchZoom = true;
+
+    // Ensure all mouse buttons are accepted for input
+    if (camera.inputs.attached.pointers) {
+        camera.inputs.attached.pointers.buttons = [0, 1, 2];
+    }
 
     const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
     light.intensity = 1.2; // Increased for PBR vibrancy
