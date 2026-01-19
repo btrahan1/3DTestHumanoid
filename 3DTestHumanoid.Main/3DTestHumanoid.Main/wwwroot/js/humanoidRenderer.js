@@ -269,9 +269,9 @@ function getNoiseTexture(type) {
             ctx.lineWidth = 1.5;
             ctx.stroke();
         } else if (type === 'leather') {
-            const s = Math.random() * 15 + 8;
+            const s = Math.random() * 5 + 2; // Much smaller for "Pores"
             ctx.beginPath();
-            ctx.ellipse(x, y, s, s * 0.8, Math.random() * Math.PI, 0, Math.PI * 2);
+            ctx.arc(x, y, s, 0, Math.PI * 2);
             ctx.fill();
         }
     }
@@ -313,13 +313,13 @@ function createMaterial(name, hexColor, type) {
             mat.albedoTexture = cTex;
             break;
         case 'leather':
-            mat.metallic = 0.05; // Very low metallic for "Buffed" look
-            mat.roughness = 0.7; // Softer, more organic
+            mat.metallic = 0.15; // Buffed sheen
+            mat.roughness = 0.45; // Glossy but semi-diffuse
             const lTex = getNoiseTexture('leather');
             mat.bumpTexture = lTex;
-            mat.bumpTexture.level = 0.4; // Subtle grain
+            mat.bumpTexture.level = 0.7; // Sharper grain
             mat.albedoTexture = lTex;
-            mat.microSurface = 0.8; // High fidelity surface detail
+            mat.environmentIntensity = 0.8; // Catch skybox reflections
             break;
         case 'cloth':
             mat.metallic = 0.0;
