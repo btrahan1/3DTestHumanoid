@@ -176,8 +176,9 @@ export function initCanvas(canvasId) {
 
     camera.attachControl(canvas, true);
     camera.wheelPrecision = 2.0; // Smoother, faster zoom
-    camera.lowerRadiusLimit = 50;
+    camera.lowerRadiusLimit = 10; // Allow much closer zoom
     camera.upperRadiusLimit = 2000;
+    camera.minZ = 0.1; // Prevent clipping when zooming into the face
 
     // Right-Click Panning (Scene Drag)
     camera.panningButton = 2; // Right Mouse Button
@@ -231,6 +232,58 @@ export function initCanvas(canvasId) {
 
 // --- MATERIAL SYSTEM ---
 const noiseCache = new Map();
+const eyeCache = new Map();
+
+function getEyeTexture(irisColorHex = "#336699") {
+    if (eyeCache.has(irisColorHex)) return eyeCache.get(irisColorHex);
+
+    const size = 512;
+    const tex = new BABYLON.DynamicTexture(`eye_${irisColorHex}`, size, scene);
+    const ctx = tex.getContext();
+
+    // 1. Sclera (White base)
+    ctx.fillStyle = "#F8F8F8";
+    ctx.fillRect(0, 0, size, size);
+
+    // 2. Iris (The Color)
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const irisRadius = size * 0.35; // Standard iris size
+
+    // Iris Gradient
+    const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, irisRadius);
+    grad.addColorStop(0, "#000000");
+    grad.addColorStop(0.2, irisColorHex);
+    grad.addColorStop(0.8, irisColorHex);
+    grad.addColorStop(1, "#000000");
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, irisRadius, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Iris Fibers (Subtle radial lines)
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 60; i++) {
+        const angle = (i / 60) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX + Math.cos(angle) * (irisRadius * 0.3), centerY + Math.sin(angle) * (irisRadius * 0.3));
+        ctx.lineTo(centerX + Math.cos(angle) * irisRadius, centerY + Math.sin(angle) * irisRadius);
+        ctx.stroke();
+    }
+
+    // 3. Pupil (Pure Black)
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, irisRadius * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = "#000000";
+    ctx.fill();
+
+    tex.update();
+    eyeCache.set(irisColorHex, tex);
+    return tex;
+}
+
 function getNoiseTexture(type) {
     if (noiseCache.has(type)) return noiseCache.get(type);
 
@@ -340,7 +393,17 @@ function createMaterial(name, hexColor, type) {
             break;
         case 'eyes':
             mat.metallic = 0.0;
-            mat.roughness = 0.05; // High gloss
+            mat.roughness = 0.1; // Extremely smooth
+            mat.albedoTexture = getEyeTexture(hexColor);
+
+            // Wet look: High ClearCoat
+            mat.clearCoat.isEnabled = true;
+            mat.clearCoat.intensity = 1.0;
+            mat.clearCoat.roughness = 0.0;
+
+            // Subsurface for organic feel
+            mat.subSurface.isScatteringEnabled = true;
+            mat.subSurface.tintColor = new BABYLON.Color3(1, 0.8, 0.8);
             break;
         case 'skin':
             mat.metallic = 0.0;
@@ -492,21 +555,50 @@ export async function loadHumanoidFbx() {
 
             result.meshes.forEach(m => {
                 const name = m.name.toLowerCase();
-                if (m.name !== "__root__" && m.name !== "customHumanoidRoot") {
-                    if (name.includes("eye")) {
-                        m.material = createMaterial("perfectEyes", "#FFFFFF", 'eyes');
-                    } else if (name.includes("hair") || name.includes("lash")) {
-                        m.material = createMaterial("perfectHair", "#221100", 'cloth');
-                    } else if (name.includes("body") || name.includes("skin") || name.includes("humanoid") || m === bodyMesh) {
-                        m.material = createMaterial("perfectSkin", "#D2B48C", 'skin');
-                        // ONLY rename the primary body mesh to avoid duplicate IDs
-                        if (m === bodyMesh) {
-                            m.name = "customHumanoid";
-                            window.humanoid = m;
-                        }
+                if (m.name === "__root__" || !m.geometry) return;
+
+                if (name.includes("hair") || name.includes("lash")) {
+                    m.material = createMaterial("perfectHair", "#221100", 'cloth');
+                } else if (name.includes("body") || name.includes("skin") || name.includes("humanoid") || m === bodyMesh) {
+                    m.material = createMaterial("perfectBody", "#ffe0bd", 'skin');
+                    if (m === bodyMesh) {
+                        m.name = "customHumanoid";
+                        window.humanoid = m;
                     }
                 }
             });
+
+            // --- PROCEDURAL EYE OVERLAYS ---
+            // The model is a merged mesh (FreeAllSTL.006), so we manually overlay the eyes
+            const headBone = getBone(skeletonProxy, "Head");
+            if (headBone) {
+                const headNode = headBone.getTransformNode();
+                if (headNode) {
+                    const createEyeOverlay = (isLeft) => {
+                        const eye = BABYLON.MeshBuilder.CreateDisc(`eye_overlay_${isLeft ? 'L' : 'R'}`, { radius: 0.028 }, scene);
+                        eye.parent = headNode;
+
+                        // Calibrated Humanoid Offsets (Relative to Head Node center)
+                        // Nudged viewer's right eye (character's left) in slightly to fix asymmetry
+                        eye.position.x = isLeft ? -0.155 : 0.17;
+                        eye.position.y = 0.52; // Vertical level is correct
+                        eye.position.z = 0.54; // Pushed back into sockets
+
+                        eye.scaling.x = 1.4; // Create oval shape
+
+                        eye.rotation.y = isLeft ? 0.18 : -0.18;
+                        eye.material = createMaterial(`eyeMat_${isLeft}`, "#3366cc", 'eyes');
+                        eye.renderingGroupId = 1;
+                        return eye;
+                    };
+
+                    if (window.leftEye) window.leftEye.dispose();
+                    if (window.rightEye) window.rightEye.dispose();
+                    window.leftEye = createEyeOverlay(true);
+                    window.rightEye = createEyeOverlay(false);
+                    console.log("Procedural Eye Overlays anchored to Head bone.");
+                }
+            }
             console.log("Perfect Anatomical Base Loaded. humanoidData status:", !!window.humanoidData);
 
             // RE-APPLY UI STATE
