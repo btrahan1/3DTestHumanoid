@@ -385,17 +385,20 @@ export async function loadHumanoidFbx() {
                         m.material = createMaterial("perfectEyes", "#FFFFFF", 'eyes');
                     } else if (name.includes("hair") || name.includes("lash")) {
                         m.material = createMaterial("perfectHair", "#221100", 'cloth');
-                    } else if (name.includes("body") || name.includes("skin") || name.includes("humanoid")) {
-                        m.material = createMaterial("perfectSkin", "#FFDBAC", 'skin');
-                        m.name = "customHumanoid"; // CRITICAL: Allow engine to find the body
-                        window.humanoid = m;
+                    } else if (name.includes("body") || name.includes("skin") || name.includes("humanoid") || m === bodyMesh) {
+                        m.material = createMaterial("perfectSkin", "#D2B48C", 'skin');
+                        // ONLY rename the primary body mesh to avoid duplicate IDs
+                        if (m === bodyMesh) {
+                            m.name = "customHumanoid";
+                            window.humanoid = m;
+                        }
                     }
                 }
             });
             console.log("Perfect Anatomical Base Loaded. humanoidData status:", !!window.humanoidData);
 
             // RE-APPLY UI STATE
-            const currentSkin = "#FFDBAC";
+            const currentSkin = "#D2B48C";
             setSkinColor(currentSkin);
 
             // RE-RENDER: Trigger equipment generation now that humanoidData is ready
@@ -438,8 +441,8 @@ export function setXRayMode(enabled) {
 export function setSkinColor(hexColor) {
     if (!characterRoot) return;
     characterRoot.getChildMeshes().forEach(m => {
-        // Only update skin regions (meshes named "Body" or with skin material)
-        if (m.name.toLowerCase().includes("body") || (m.material && m.material.name.includes("Skin"))) {
+        // Only update skin regions (canonical body, meshes named "Body", or with skin material)
+        if (m.name === "customHumanoid" || m.name.toLowerCase().includes("body") || (m.material && m.material.name.includes("Skin"))) {
             if (m.material instanceof BABYLON.PBRMaterial) {
                 m.material.albedoColor = BABYLON.Color3.FromHexString(hexColor);
             } else if (m.material instanceof BABYLON.StandardMaterial) {
@@ -529,7 +532,7 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
     const regionIds = data.regionIds;
     console.log(`Generating Armor: ${name}, regions: ${targetRegions}, inflation: ${inflateAmount}`);
 
-    const baseMesh = scene.getMeshByName("customHumanoid") || scene.meshes.find(m => m.name.toLowerCase().includes("body") || m.name.toLowerCase().includes("skin"));
+    const baseMesh = window.humanoid || scene.getMeshByName("customHumanoid") || scene.meshes.find(m => m.name.toLowerCase().includes("body") || m.name.toLowerCase().includes("skin"));
 
     // 1. Filter Vertices & Build New Index Map
     const newPositions = [];
@@ -580,10 +583,10 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
         if (baseMesh) {
             const normals = baseMesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
             if (normals && oldIdx * 3 + 2 < normals.length) {
-                // Mixamo GLTF normals are often flipped vs FBX/JSON
-                nx = -normals[oldIdx * 3];
-                ny = -normals[oldIdx * 3 + 1];
-                nz = -normals[oldIdx * 3 + 2];
+                // Return to standard normal orientation for GLB/PBR sync
+                nx = normals[oldIdx * 3];
+                ny = normals[oldIdx * 3 + 1];
+                nz = normals[oldIdx * 3 + 2];
             }
         }
 
@@ -670,9 +673,8 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
 
     vertexData.applyToMesh(mesh);
 
-    // 4. Shared Skeleton Strategy (Fixes "Explosion" and "Ghosting")
-    // Instead of cloning the skeleton (which desynchronizes), we use the main skeletonProxy.
-    // This ensures perfect synchronization with the body.
+    // 4. Transform & Parenting Sync
+    // Sync skeleton and bone influences
     mesh.skeleton = skeletonProxy;
     mesh.numBoneInfluencers = 4;
     mesh.refreshBoundingInfo();
@@ -680,20 +682,20 @@ function createClothingMesh(name, targetRegions, inflateAmount, colorHex, matTyp
     // Material (Uses new PBR Helper)
     mesh.material = createMaterial(name + "_mat", colorHex, matType);
 
-    // Parent to the same node as the body to inherit coordinate system/offsets
-    const container = window.humanoidContainer || scene.getMeshByName("characterContainer") || characterRoot;
-    mesh.parent = container;
-
     if (baseMesh) {
-        // MATCH BODY TRANSFORMS EXACTLY
+        // MATCH BODY HIERARCHY AND TRANSFORMS EXACTLY
+        mesh.parent = baseMesh.parent;
         if (baseMesh.rotationQuaternion) mesh.rotationQuaternion = baseMesh.rotationQuaternion.clone();
         else mesh.rotation = baseMesh.rotation.clone();
         mesh.position = baseMesh.position.clone();
         mesh.scaling = baseMesh.scaling.clone();
     } else {
+        // Fallback: If no body mesh, use the tracked container or root
+        const container = window.humanoidContainer || scene.getMeshByName("characterContainer") || characterRoot;
+        mesh.parent = container;
         mesh.position = BABYLON.Vector3.Zero();
         mesh.scaling = BABYLON.Vector3.One();
-        // Fallback: If no body mesh, use standard stand-up rotation
+        // Restore standard "Stand Up" rotation for FBX/GLB rest poses if missing parent logic
         mesh.rotation.x = Math.PI / 2;
     }
 }
