@@ -120,82 +120,154 @@
 
                     <!-- ARMOR SLOTS -->
                     <h6 class="mb-2 text-muted x-small">Armor</h6>
+                    
+                    <!-- HEAD -->
                     <div class="mb-2">
                         <label class="form-label x-small">Head</label>
-                        <select class="form-select form-select-sm" @bind="recipe.HeadSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="ClothHood">Cloth Hood</option>
-                            <option value="LeatherHelm">Leather Helm</option>
-                            <option value="ChainHood">Chain Hood</option>
-                            <option value="PlateHelm">Plate Helm</option>
-                        </select>
+                        <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.HeadSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="ClothHood">Cloth Hood</option>
+                                <option value="LeatherHelm">Leather Helm</option>
+                                <option value="ChainHood">Chain Hood</option>
+                                <option value="PlateHelm">Plate Helm</option>
+                            </select>
+                            <select class="form-select form-select-sm" @bind="recipe.HeadColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.HeadColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
+                    
+                    <!-- CAP -->
                     <div class="mb-2">
                         <label class="form-label x-small">Cap</label>
-                        <select class="form-select form-select-sm" @bind="recipe.CapSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="LeatherCap">Leather Cap</option>
-                        </select>
+                        <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.CapSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="LeatherCap">Leather Cap</option>
+                            </select>
+                            <select class="form-select form-select-sm" @bind="recipe.CapColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.CapColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
+
+                    <!-- SHOULDERS -->
                     <div class="mb-2">
                          <label class="form-label x-small">Shoulders</label>
-                        <select class="form-select form-select-sm" @bind="recipe.ShouldersSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="ClothPauldrons">Cloth Mantle</option>
-                            <option value="LeatherPauldrons">Leather Pauldrons</option>
-                            <option value="ChainPauldrons">Chain Mantle</option>
-                            <option value="PlatePauldrons">Plate Pauldrons</option>
-                        </select>
+                         <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.ShouldersSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="ClothPauldrons">Cloth Mantle</option>
+                                <option value="LeatherPauldrons">Leather Pauldrons</option>
+                                <option value="ChainPauldrons">Chain Mantle</option>
+                                <option value="PlatePauldrons">Plate Pauldrons</option>
+                            </select>
+                             <select class="form-select form-select-sm" @bind="recipe.ShouldersColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.ShouldersColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
+
+                    <!-- CHEST -->
                     <div class="mb-2">
                          <label class="form-label x-small">Chest</label>
-                        <select class="form-select form-select-sm" @bind="recipe.TorsoSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="Shirt">Shirt (Cloth)</option>
-                            <option value="LeatherVest">Leather Vest</option>
-                            <option value="Chainmail">Chainmail</option>
-                            <option value="PlateArmor">Plate Armor</option>
-                        </select>
+                         <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.TorsoSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="Shirt">Shirt (Cloth)</option>
+                                <option value="LeatherVest">Leather Vest</option>
+                                <option value="Chainmail">Chainmail</option>
+                                <option value="PlateArmor">Plate Armor</option>
+                            </select>
+                            <select class="form-select form-select-sm" @bind="recipe.TorsoColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.TorsoColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
-                     <div class="mb-2">
-                         <label class="form-label x-small">Arms</label>
-                        <select class="form-select form-select-sm" @bind="recipe.ArmsSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="ClothSleeves">Cloth Sleeves</option>
-                            <option value="LeatherBracers">Leather Arms</option>
-                            <option value="ChainSleeves">Chain Sleeves</option>
-                            <option value="PlateVambraces">Plate Vambraces</option>
-                        </select>
+
+                    <!-- ARMS -->
+                    <div class="mb-2">
+                          <label class="form-label x-small">Arms</label>
+                          <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.ArmsSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="ClothSleeves">Cloth Sleeves</option>
+                                <option value="LeatherBracers">Leather Arms</option>
+                                <option value="ChainSleeves">Chain Sleeves</option>
+                                <option value="PlateVambraces">Plate Vambraces</option>
+                            </select>
+                            <select class="form-select form-select-sm" @bind="recipe.ArmsColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.ArmsColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
-                     <div class="mb-2">
-                         <label class="form-label x-small">Hands</label>
-                        <select class="form-select form-select-sm" @bind="recipe.HandsSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="ClothGloves">Cloth Gloves</option>
-                            <option value="LeatherGloves">Leather Gloves</option>
-                            <option value="ChainGloves">Chain Gloves</option>
-                            <option value="PlateGauntlets">Plate Gauntlets</option>
-                        </select>
+
+                    <!-- HANDS -->
+                    <div class="mb-2">
+                          <label class="form-label x-small">Hands</label>
+                          <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.HandsSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="ClothGloves">Cloth Gloves</option>
+                                <option value="LeatherGloves">Leather Gloves</option>
+                                <option value="ChainGloves">Chain Gloves</option>
+                                <option value="PlateGauntlets">Plate Gauntlets</option>
+                            </select>
+                             <select class="form-select form-select-sm" @bind="recipe.HandsColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.HandsColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
+
+                    <!-- LEGS -->
                     <div class="mb-2">
                          <label class="form-label x-small">Legs</label>
-                        <select class="form-select form-select-sm" @bind="recipe.LegsSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="Pants">Pants (Cloth)</option>
-                            <option value="LeatherChaps">Leather Chaps</option>
-                            <option value="ChainLegs">Chain Legs</option>
-                            <option value="PlateGreaves">Plate Greaves</option>
-                        </select>
+                         <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.LegsSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="Pants">Pants (Cloth)</option>
+                                <option value="LeatherChaps">Leather Chaps</option>
+                                <option value="ChainLegs">Chain Legs</option>
+                                <option value="PlateGreaves">Plate Greaves</option>
+                            </select>
+                            <select class="form-select form-select-sm" @bind="recipe.LegsColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.LegsColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
+
+                    <!-- FEET -->
                     <div class="mb-2">
                          <label class="form-label x-small">Feet</label>
-                        <select class="form-select form-select-sm" @bind="recipe.FeetSlot" @bind:after="Render">
-                            <option value="None">None</option>
-                            <option value="ClothShoes">Cloth Shoes</option>
-                            <option value="Boots">Boots (Leather)</option>
-                            <option value="ChainBoots">Chain Boots</option>
-                            <option value="PlateBoots">Plate Boots</option>
-                        </select>
+                         <div class="d-flex gap-1">
+                            <select class="form-select form-select-sm" @bind="recipe.FeetSlot" @bind:after="Render" style="flex:2">
+                                <option value="None">None</option>
+                                <option value="ClothShoes">Cloth Shoes</option>
+                                <option value="Boots">Boots (Leather)</option>
+                                <option value="ChainBoots">Chain Boots</option>
+                                <option value="PlateBoots">Plate Boots</option>
+                            </select>
+                             <select class="form-select form-select-sm" @bind="recipe.FeetColor" @bind:after="Render" style="flex:1; min-width:80px;" title="Preset">
+                                <option value="" disabled selected>Color...</option>
+                                @foreach(var c in ColorPresets) { <option value="@c.Value">@c.Key</option> }
+                            </select>
+                            <input type="color" class="form-control form-control-sm form-control-color" @bind="recipe.FeetColor" @bind:after="Render" title="Custom" />
+                        </div>
                     </div>
                 </div>
             </details>
@@ -319,6 +391,19 @@
     // Pasteboard
     private string pasteJson = "";
     private string pasteError = "";
+
+    private Dictionary<string, string> ColorPresets = new() {
+        { "Leather (Brown)", "#3D2B1F" },
+        { "Metal (Silver)", "#E0E0E0" },
+        { "Dark Metal", "#505050" },
+        { "Gold", "#DAA520" },
+        { "Cloth (Blue)", "#3B5998" },
+        { "Cloth (Red)", "#8B0000" },
+        { "Cloth (Green)", "#228B22" },
+        { "Cloth (White)", "#F0F0F0" },
+        { "Black", "#151515" }, 
+        { "Rust", "#685948" }
+    };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
