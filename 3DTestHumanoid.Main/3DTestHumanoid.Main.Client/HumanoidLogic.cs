@@ -47,10 +47,11 @@ public class HumanoidRecipe
     public float BrowDepth { get; set; } = 1.0f;
     public float MouthDepth { get; set; } = 1.0f;
 
-    // Arsenal
-    public bool HasSword { get; set; } = false;
-    public bool HasShield { get; set; } = false;
-    public bool HasSpear { get; set; } = false;
+    // ARSENAL
+    public string RightHandSlot { get; set; } = "None";
+    public string RightHandColor { get; set; } = "#E0E0E0"; 
+    public string LeftHandSlot { get; set; } = "None";
+    public string LeftHandColor { get; set; } = "#E0E0E0"; 
     
     public string ClothColor { get; set; } = "#3B5998"; // Denim Blue
     public string LeatherColor { get; set; } = "#3D2B1F"; // Dark Brown
@@ -293,46 +294,88 @@ public static class HumanoidSolver
             parts.Add(GenerateBall("R_Deltoid", new Vector3(armSep, yNeck, armForwardOffset), deltSize, deltColor));
         }
 
-        if (recipe.HasSword)
-        {
-            // Sword: Attached to Right Hand.
-            // Hilt
-            parts.Add(GenerateTube("Sword_Hilt", handOrigin + new Vector3(0,-5,0), handOrigin + new Vector3(0,5,0), 1.5f, recipe.LeatherColor));
-            
-            // Crossguard
-            parts.Add(GenerateTube("Sword_Guard", handOrigin + new Vector3(-8, 5, 0), handOrigin + new Vector3(8, 5, 0), 1.5f, recipe.MetalColor));
-
-            // Blade
-            var bladeStart = handOrigin + new Vector3(0, 5, 0);
-            var bladeEnd = bladeStart + new Vector3(0, 60, 0);
-            parts.Add(new BodyPartDto {
-                Name = "Sword_Blade",
-                Path = CreateLine(bladeStart, bladeEnd, 2),
-                Radii = new float[] { 4f, 0.5f }, // Taper
-                Scale = new VectorDto(0.2f, 1f, 1f), // Flatten X (Edge along Z)
-                Color = recipe.MetalColor
-            });
-        }
-
-        if (recipe.HasSpear)
-        {
-            // Spear: Attached to Right Hand.
-            // Shaft
-            var shaftBottom = handOrigin + new Vector3(0, -60, 0);
-            var shaftTop = handOrigin + new Vector3(0, 60, 0);
-            parts.Add(GenerateTube("Spear_Shaft", shaftBottom, shaftTop, 1.2f, recipe.WoodColor));
-            
-            // Head
-            parts.Add(new BodyPartDto {
-                Name = "Spear_Head",
-                Path = CreateLine(shaftTop, shaftTop + new Vector3(0, 15, 0), 2),
-                Radii = new float[] { 3f, 0.1f },
-                Scale = new VectorDto(0.2f, 1f, 1f), // Flatten
-                Color = recipe.MetalColor
-            });
-        }
+        // process HANDS
+        ProcessSlot(parts, "RightHand", recipe.RightHandSlot, recipe.RightHandColor);
+        ProcessSlot(parts, "LeftHand", recipe.LeftHandSlot, recipe.LeftHandColor);
 
         return parts;
+    }
+
+    private static void ProcessSlot(List<BodyPartDto> parts, string handPrefix, string slotType, string color)
+    {
+        if (string.IsNullOrEmpty(slotType) || slotType == "None") return;
+
+        var weaponParts = GetWeaponParts(handPrefix, slotType, color);
+        parts.AddRange(weaponParts);
+    }
+
+    private static List<BodyPartDto> GetWeaponParts(string prefix, string type, string color)
+    {
+        var list = new List<BodyPartDto>();
+        // Logic: Origin is (0,0,0) relative to Hand Bone
+        var origin = Vector3.Zero; 
+
+        if (type == "Sword")
+        {
+             // Hilt
+            list.Add(GenerateTube($"{prefix}_Sword_Hilt", origin + new Vector3(0,-5,0), origin + new Vector3(0,5,0), 1.5f, "#3D2B1F"));
+            // Crossguard
+            list.Add(GenerateTube($"{prefix}_Sword_Guard", origin + new Vector3(-8, 5, 0), origin + new Vector3(8, 5, 0), 1.5f, "#505050"));
+            // Blade
+            var bladeStart = origin + new Vector3(0, 5, 0);
+            var bladeEnd = bladeStart + new Vector3(0, 70, 0);
+            list.Add(new BodyPartDto {
+                Name = $"{prefix}_Sword_Blade",
+                Path = CreateLine(bladeStart, bladeEnd, 2),
+                Radii = new float[] { 4f, 0.5f },
+                Scale = new VectorDto(0.2f, 1f, 1f),
+                Color = color
+            });
+        }
+        else if (type == "Axe")
+        {
+             // Handle
+            list.Add(GenerateTube($"{prefix}_Axe_Handle", origin + new Vector3(0,-10,0), origin + new Vector3(0,50,0), 1.8f, "#5C4033"));
+            // Head
+            var headCenter = origin + new Vector3(0, 40, 0);
+            // Simple generic axe head shape
+             list.Add(new BodyPartDto {
+                Name = $"{prefix}_Axe_Head",
+                Path = CreateLine(headCenter + new Vector3(-12, 0, 0), headCenter + new Vector3(18, 0, 0), 2),
+                Radii = new float[] { 2f, 14f }, // Flare out
+                Scale = new VectorDto(1f, 1f, 0.4f), // Flatten Z
+                Color = color
+            });
+        }
+        else if (type == "Shield")
+        {
+            // Simple Round Shield
+             list.Add(new BodyPartDto {
+                Name = $"{prefix}_Shield_Core",
+                Path = CreateLine(origin + new Vector3(0, 0, 2), origin + new Vector3(0, 0, 4), 2),
+                Radii = new float[] { 22f, 22f },
+                Scale = new VectorDto(1f, 1.2f, 0.2f),
+                Color = color
+            });
+             list.Add(new BodyPartDto {
+                Name = $"{prefix}_Shield_Rim",
+                Path = CreateLine(origin + new Vector3(0, 0, 2), origin + new Vector3(0, 0, 4), 2),
+                Radii = new float[] { 24f, 24f },
+                Scale = new VectorDto(1f, 1.2f, 0.2f),
+                Color = "#505050"
+            });
+        }
+        else if (type == "Spear")
+        {
+            // Shaft
+            list.Add(GenerateTube($"{prefix}_Spear_Shaft", origin + new Vector3(0,-40,0), origin + new Vector3(0,80,0), 1.2f, "#5C4033"));
+            // Tip
+            list.Add(GenerateTube($"{prefix}_Spear_Tip", origin + new Vector3(0,80,0), origin + new Vector3(0,95,0), 1.5f, color));
+        }
+
+        return list;
+
+
     }
 
     // --- GEOMETRY HELPERS ---

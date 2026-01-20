@@ -11,7 +11,12 @@ let clothingSkeletons = []; // Store cloned skeletons for animation
 let inputMap = {};
 
 
-// Duplicate removed
+// ANIMATION STATE GLOBALS
+let holdingRight = false;
+let holdingLeft = false;
+let weaponSockets = {}; // Store TransformNodes: { Right: node, Left: node }
+let animState = "idle"; // Ensure this matches existing state tracking
+
 
 
 // --- BONE HELPERS ---
@@ -35,7 +40,7 @@ function getBoneIndex(skel, name) {
     return idx;
 }
 
-let animState = "idle";
+
 
 function updateAnimation() {
     const allSkeletons = [skeletonProxy, ...clothingSkeletons].filter(s => s && s.bones.length);
@@ -101,11 +106,34 @@ function updateAnimation() {
             rotateJoint("RightForeArm", new BABYLON.Vector3(0, 0, -Math.max(0, Math.sin(cycle)) * 0.4));
             rotateJoint("RightHand", new BABYLON.Vector3(-0.4, 0, 0));
 
-            // 38-Bone Rig Finger Stiffening
-            for (let i = 1; i <= 4; i++) {
-                rotateJoint(`LeftHandIndex${i}`, new BABYLON.Vector3(0, 0, -0.1)); // Point Down
-                rotateJoint(`RightHandIndex${i}`, new BABYLON.Vector3(0, 0, 0.1)); // Point Down
-            }
+            // 38-Bone Rig Finger Logic (FULL HAND) - DISABLED PER USER REQUEST
+            /*
+            const applyFist = (side, isHolding) => {
+                const curl = isHolding ? 1.4 : 0.1; // Base curl
+                const sign = side === "Left" ? -1 : 1;
+                
+                // 1. Fingers (Index, Middle, Ring, Pinky)
+                const fingers = ["Index", "Middle", "Ring", "Pinky"];
+                fingers.forEach((fName, idx) => {
+                    // Ring/Pinky curl slightly more (Natural Grip)
+                    const extraCurl = (idx >= 2 && isHolding) ? 0.2 : 0; 
+                    for (let i = 1; i <= 3; i++) { // Usually 3 joints per finger
+                        rotateJoint(`${side}Hand${fName}${i}`, new BABYLON.Vector3(0, 0, (curl + extraCurl) * sign));
+                    }
+                });
+
+                // 2. The Thumb (Opposition + Curl)
+                if (isHolding) {
+                    // Thumb 1: Fold Inwards (Opposition)
+                    rotateJoint(`${side}HandThumb1`, new BABYLON.Vector3(0, 0.5 * sign, 0.5 * sign));
+                    // Thumb 2-3: Curl Down (Grip)
+                    rotateJoint(`${side}HandThumb2`, new BABYLON.Vector3(0, 0, 1.0 * sign));
+                    rotateJoint(`${side}HandThumb3`, new BABYLON.Vector3(0, 0, 1.0 * sign));
+                }
+            };
+            applyFist("Left", holdingLeft);
+            applyFist("Right", holdingRight);
+            */
 
             rotateJoint("LeftShoulder", new BABYLON.Vector3(0, 0, Math.sin(cycle) * 0.05));
             rotateJoint("RightShoulder", new BABYLON.Vector3(0, 0, -Math.sin(cycle) * 0.05));
@@ -130,6 +158,32 @@ function updateAnimation() {
             rotateJoint("RightUpLeg", BABYLON.Vector3.Zero());
             rotateJoint("LeftLeg", BABYLON.Vector3.Zero());
             rotateJoint("RightLeg", BABYLON.Vector3.Zero());
+
+            // FIST LOGIC FOR IDLE - DISABLED PER USER REQUEST
+            /*
+            const applyFist = (side, isHolding) => {
+                const curl = isHolding ? 1.4 : 0.1;
+                const sign = side === "Left" ? -1 : 1;
+                
+                // 1. Fingers (Index, Middle, Ring, Pinky)
+                const fingers = ["Index", "Middle", "Ring", "Pinky"];
+                fingers.forEach((fName, idx) => {
+                     const extraCurl = (idx >= 2 && isHolding) ? 0.2 : 0;
+                    for (let i = 1; i <= 3; i++) {
+                        rotateJoint(`${side}Hand${fName}${i}`, new BABYLON.Vector3(0, 0, (curl + extraCurl) * sign));
+                    }
+                });
+
+                // 2. The Thumb
+                if (isHolding) {
+                    rotateJoint(`${side}HandThumb1`, new BABYLON.Vector3(0, 0.5 * sign, 0.5 * sign));
+                    rotateJoint(`${side}HandThumb2`, new BABYLON.Vector3(0, 0, 1.0 * sign));
+                    rotateJoint(`${side}HandThumb3`, new BABYLON.Vector3(0, 0, 1.0 * sign));
+                }
+            };
+            applyFist("Left", holdingLeft);
+            applyFist("Right", holdingRight);
+            */
         }
     });
 }
@@ -1226,13 +1280,57 @@ export function renderHumanoid(bodyParts) {
     if (!scene || !characterRoot) return;
     lastBodyParts = bodyParts; // CACHE for post-load sync
 
+    // RESET HOLD FLAGS
+    holdingRight = false;
+    holdingLeft = false;
+
     // Clean up old meshes AND skeletons
-    const oldMeshes = scene.meshes.filter(m => m.name.startsWith("cloth_") || m.name.startsWith("armor_") || m.name.startsWith("proc_") || m.name.includes("_debug"));
+    const oldMeshes = scene.meshes.filter(m => m.name.startsWith("cloth_") || m.name.startsWith("armor_") || m.name.startsWith("proc_") || m.name.startsWith("RightHand_") || m.name.startsWith("LeftHand_") || m.name.includes("_debug"));
     console.log(`Disposing ${oldMeshes.length} old equipment meshes...`);
     oldMeshes.forEach(m => m.dispose());
 
+    // Dispose Skeletons
     clothingSkeletons.forEach(s => s.dispose());
     clothingSkeletons = [];
+
+    // --- WEAPON SOCKET SETUP ---
+    if (scene && skeletonProxy && characterRoot) {
+        const setupSocket = (side) => {
+            const boneName = side + "Hand"; // RightHand, LeftHand
+            const socketName = "Socket_" + side;
+
+            // Check if exists
+            if (!weaponSockets[side] || weaponSockets[side].isDisposed()) {
+                weaponSockets[side] = new BABYLON.TransformNode(socketName, scene);
+            }
+            const socket = weaponSockets[side];
+
+            // Attach to Bone
+            const bone = getBone(skeletonProxy, boneName);
+            if (bone) {
+                const charMesh = scene.getMeshByName("customHumanoid");
+                if (charMesh) socket.attachToBone(bone, charMesh);
+
+                // APPLY OFFSET (Calibrated for Palm)
+                // DEBUG: Increasing offset to 0.40 (40cm!) to calculate scale/direction
+                // Adding Visual Debugger
+                socket.position = new BABYLON.Vector3(0, 0.40, 0);
+
+                // APPLY ROTATION (Align Up with Out)
+                // Right Hand: Needs to point "Other Way" (180 Flip)
+                if (side === "Right") {
+                    socket.rotation = new BABYLON.Vector3(0, Math.PI, Math.PI / 2);
+                } else {
+                    socket.rotation = new BABYLON.Vector3(0, 0, Math.PI / 2);
+                }
+
+
+
+            }
+        };
+        setupSocket("Right");
+        setupSocket("Left");
+    }
 
     // Check flags
     const hasShirt = bodyParts.some(p => p.name.includes("Shirt"));
@@ -1308,231 +1406,241 @@ export function renderHumanoid(bodyParts) {
 
             mesh.material = mat;
 
-            // --- ATTACHMENT LOGIC ---
-            if (skeletonProxy) {
-                let targetBone = null;
+            // --- SOCKET ATTACHMENT LOGIC ---
+            let socket = null;
+            if (part.name.startsWith("RightHand_")) {
+                socket = weaponSockets["Right"];
+                holdingRight = true;
+            } else if (part.name.startsWith("LeftHand_")) {
+                socket = weaponSockets["Left"];
+                holdingLeft = true;
+            }
 
-                if (part.name.includes("Sword") || part.name.includes("Spear")) {
-                    targetBone = getBone(skeletonProxy, "RightHand");
-                } else if (part.name.includes("Shield")) {
-                    targetBone = getBone(skeletonProxy, "LeftHand");
+            if (socket) {
+                // Parent to Socket
+                mesh.parent = socket;
+
+                // Reset Transform (Local to Socket)
+                mesh.position = BABYLON.Vector3.Zero();
+                mesh.rotation = BABYLON.Vector3.Zero();
+
+                // SCALE UP (Triple Size)
+                mesh.scaling = new BABYLON.Vector3(3, 3, 3);
+
+                // Shield Specific Local Adjustment
+                if (part.name.includes("Shield")) {
+                    // Shields might need to rotate 90 deg relative to Sword grip
+                    // Sword = Pointing Out. Shield = Facing Out.
+                    // If Socket is "Pointing Out", Shield needs to rotate Face to Out.
+                    // Usually Shield Face is Y or Z? 
+                    // Let's try identity first.
+                    // Actually, Shields usually need +90 X or Y.
+                    mesh.rotation = new BABYLON.Vector3(Math.PI / 2, 0, 0);
                 }
-
-                if (targetBone) {
-                    const charMesh = scene.getMeshByName("customHumanoid");
-                    if (charMesh) {
-                        mesh.attachToBone(targetBone, charMesh);
-                    }
-
-                    // Rotation Fix based on Local Space Generation
-                    // C# Generates "Up" along Y.
-                    // Hand Bone (Right) usually points X or -X.
-                    // We might need to rotate the mesh to align with the hand.
-                    // Sword/Spear: Generated Vertical (Y). 
-                    // Attaching to Hand: We probably want it to align with the Hand's "Up" or "Forward".
-                    // For now, let's just fix the crash. Alignment can be tuned next.
+            } else {
+                // If not attached, parent to same as body
+                const charMesh = scene.getMeshByName("customHumanoid");
+                if (charMesh) {
+                    mesh.parent = charMesh.parent;
+                    mesh.position = BABYLON.Vector3.Zero();
+                    mesh.rotation.x = Math.PI / 2; // STAND UP
                 } else {
-                    // If not attached, parent to same as body
-                    if (charMesh) {
-                        mesh.parent = charMesh.parent;
-                        mesh.position = BABYLON.Vector3.Zero();
-                        mesh.rotation.x = Math.PI / 2; // STAND UP
-                    } else {
-                        mesh.parent = characterRoot;
-                    }
+                    mesh.parent = characterRoot;
                 }
             }
         });
+
+
+        // --- ARMOR & CLOTHING SLOT SYSTEM ---
+        // Format: "Slot_Type" (e.g. "Torso_PlateArmor", "Legs_Pants")
+
+        bodyParts.forEach(part => {
+
+            const parts = part.name.split('_');
+            if (parts.length < 2) return;
+
+            const slot = parts[0]; // Torso, Legs, Feet, etc.
+            const type = parts[1]; // PlateArmor, Pants, etc.
+
+            let regions = [];
+            let inflation = 1.0;
+            let matType = 'cloth';
+            let maxHeight = null;
+            let minHeight = null;
+            let exclusions = [];
+            let includeBones = null;
+
+            let smoothing = 0;
+
+            // 1. Determine Dimensions & Material based on TYPE
+            if (type.includes("Plate")) {
+                inflation = 5.0; // Significant Bulge
+                smoothing = 2;   // HARDEN: Reduced from 5 to maintain "hammered" edges
+                matType = 'metal';
+            } else if (type.includes("Chain")) {
+                inflation = 2.4;
+                smoothing = 2;   // Light Smoothing to hide sharpest abs
+                matType = 'chain';
+            } else if (type.includes("Leather")) {
+                inflation = 2.8;
+                smoothing = 3;   // Moderate Smoothing for "Stiff" leather
+                matType = 'leather';
+            } else {
+                // Default Cloth
+                inflation = 1.2;
+                smoothing = 0;   // Keep cloth tight to body
+                matType = 'cloth';
+            }
+
+            // 2. Determine Regions based on SLOT
+            if (slot === "Torso") {
+                regions = [1, 0, 4]; // Torso + Neck (0) + Hips (4) bleed
+                maxHeight = 7.7;     // Base of neck
+                minHeight = 4.4;     // Lowered to overlap better with groin
+                includeBones = [
+                    getBoneIndex(skeletonProxy, "Hips"),
+                    getBoneIndex(skeletonProxy, "Spine"),
+                    getBoneIndex(skeletonProxy, "Spine1"),
+                    getBoneIndex(skeletonProxy, "Spine2"),
+                    getBoneIndex(skeletonProxy, "Neck")
+                ];
+
+            } else if (slot === "Shoulders") {
+                regions = [2, 3, 1]; // Arm regions + Torso overlap to close gaps
+                includeBones = [
+                    getBoneIndex(skeletonProxy, "LeftShoulder"),
+                    getBoneIndex(skeletonProxy, "LeftArm"),
+                    getBoneIndex(skeletonProxy, "RightShoulder"),
+                    getBoneIndex(skeletonProxy, "RightArm")
+                ];
+                minHeight = 6.4; // Lower slightly to reach Chestplate
+                maxHeight = 8.1; // Reach up to cover collarbone
+                inflation += 0.4; // Restore some bulk for coverage
+
+            } else if (slot === "Arms") {
+                regions = [2, 3]; // Arm regions only (Remove Torso bleed)
+                includeBones = [
+                    getBoneIndex(skeletonProxy, "LeftArm"),
+                    getBoneIndex(skeletonProxy, "LeftForeArm"),
+                    getBoneIndex(skeletonProxy, "RightArm"),
+                    getBoneIndex(skeletonProxy, "RightForeArm")
+                ];
+                exclusions = [
+                    getBoneIndex(skeletonProxy, "LeftHand"),
+                    getBoneIndex(skeletonProxy, "RightHand"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex1"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex2"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex3"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex4"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex1"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex2"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex3"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex4")
+                ];
+
+            } else if (slot === "Legs") {
+                regions = [1, 4, 5, 6, 0]; // Catch everything from waist down
+                minHeight = 0.6;
+                maxHeight = 6.0; // High-waist to overlap breastplate (starts at 4.4)
+                inflation = 4.2;
+                includeBones = [
+                    getBoneIndex(skeletonProxy, "Hips"),
+                    getBoneIndex(skeletonProxy, "LeftUpLeg"),
+                    getBoneIndex(skeletonProxy, "LeftLeg"),
+                    getBoneIndex(skeletonProxy, "RightUpLeg"),
+                    getBoneIndex(skeletonProxy, "RightLeg")
+                ];
+                exclusions = [
+                    getBoneIndex(skeletonProxy, "LeftFoot"),
+                    getBoneIndex(skeletonProxy, "RightFoot"),
+                    getBoneIndex(skeletonProxy, "LeftToeBase"),
+                    getBoneIndex(skeletonProxy, "RightToeBase")
+                ];
+                if (matType === 'cloth') inflation = 1.2;
+                if (matType === 'cloth') exclusions = [];
+
+            } else if (slot === "Feet") {
+                // SLEDGEHAMMER: Include ALL regions (0-31) for the feet slot.
+                // maxHeight will keep it strictly at the ankle level.
+                regions = Array.from({ length: 32 }, (_, i) => i);
+                maxHeight = 1.2;
+                includeBones = [
+                    getBoneIndex(skeletonProxy, "LeftLeg"),
+                    getBoneIndex(skeletonProxy, "RightLeg"),
+                    getBoneIndex(skeletonProxy, "LeftFoot"),
+                    getBoneIndex(skeletonProxy, "LeftToeBase"),
+                    getBoneIndex(skeletonProxy, "LeftToe_End"),
+                    getBoneIndex(skeletonProxy, "LeftToe_End_end"),
+                    getBoneIndex(skeletonProxy, "RightFoot"),
+                    getBoneIndex(skeletonProxy, "RightToeBase"),
+                    getBoneIndex(skeletonProxy, "RightToe_End"),
+                    getBoneIndex(skeletonProxy, "RightToe_End_end")
+                ];
+                exclusions = [
+                    getBoneIndex(skeletonProxy, "LeftUpLeg"),
+                    getBoneIndex(skeletonProxy, "RightUpLeg"),
+                    getBoneIndex(skeletonProxy, "Hips"),
+                    getBoneIndex(skeletonProxy, "Spine")
+                ];
+                if (type.includes("Plate")) inflation = 3.5; // Specific plate boost
+                else if (type.includes("Cloth") || type.includes("Shoes")) inflation = 1.4;
+                else inflation = 2.4;
+
+            } else if (slot === "Hands") {
+                regions = [2, 3];
+                // Hands must be SLIMMER and stop at wrist
+                inflation = 1.2;
+                smoothing = 5;
+                includeBones = [
+                    getBoneIndex(skeletonProxy, "LeftHand"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex1"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex2"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex3"),
+                    getBoneIndex(skeletonProxy, "LeftHandIndex4"),
+                    getBoneIndex(skeletonProxy, "RightHand"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex1"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex2"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex3"),
+                    getBoneIndex(skeletonProxy, "RightHandIndex4")
+                ];
+                // EXCLUDE EVERYTHING ELSE to kill blobs on bicep/torso
+                exclusions = [
+                    getBoneIndex(skeletonProxy, "LeftArm"),
+                    getBoneIndex(skeletonProxy, "RightArm"),
+                    getBoneIndex(skeletonProxy, "LeftShoulder"),
+                    getBoneIndex(skeletonProxy, "RightShoulder"),
+                    getBoneIndex(skeletonProxy, "Hips"),
+                    getBoneIndex(skeletonProxy, "Spine"),
+                    getBoneIndex(skeletonProxy, "Spine1")
+                ];
+                // Forearm is NOT excluded anymore, allowing "Bleed" to cover the wrist.
+
+            } else if (slot === "Head") {
+                regions = [0]; // Head
+                if (type.includes("Cloth")) inflation = 1.25;
+                else inflation = 1.5;
+
+            } else if (slot === "Cap") {
+                regions = [0]; // Head
+                inflation = 1.25; // Snug fit (Cloth/Leather default)
+                // matType determined by Generic Logic (lines 1370+)
+
+                // CLIPPING: Start high up (Crown only)
+                // Estimation: Neck=8.0 -> Mid-Head=8.8
+                // 8.8 was "Small Patch". 
+                minHeight = 8.5;
+            }
+
+            // 3. GENERATE
+            if (regions.length > 0) {
+                // Unique ID for the mesh
+                const meshName = `armor_${slot}_${type}`;
+                createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones, smoothing, minHeight);
+            }
+        });
+
+        renderFace(bodyParts);
     }
-
-    // --- ARMOR & CLOTHING SLOT SYSTEM ---
-    // Format: "Slot_Type" (e.g. "Torso_PlateArmor", "Legs_Pants")
-
-    bodyParts.forEach(part => {
-
-        const parts = part.name.split('_');
-        if (parts.length < 2) return;
-
-        const slot = parts[0]; // Torso, Legs, Feet, etc.
-        const type = parts[1]; // PlateArmor, Pants, etc.
-
-        let regions = [];
-        let inflation = 1.0;
-        let matType = 'cloth';
-        let maxHeight = null;
-        let minHeight = null;
-        let exclusions = [];
-        let includeBones = null;
-
-        let smoothing = 0;
-
-        // 1. Determine Dimensions & Material based on TYPE
-        if (type.includes("Plate")) {
-            inflation = 5.0; // Significant Bulge
-            smoothing = 2;   // HARDEN: Reduced from 5 to maintain "hammered" edges
-            matType = 'metal';
-        } else if (type.includes("Chain")) {
-            inflation = 2.4;
-            smoothing = 2;   // Light Smoothing to hide sharpest abs
-            matType = 'chain';
-        } else if (type.includes("Leather")) {
-            inflation = 2.8;
-            smoothing = 3;   // Moderate Smoothing for "Stiff" leather
-            matType = 'leather';
-        } else {
-            // Default Cloth
-            inflation = 1.2;
-            smoothing = 0;   // Keep cloth tight to body
-            matType = 'cloth';
-        }
-
-        // 2. Determine Regions based on SLOT
-        if (slot === "Torso") {
-            regions = [1, 0, 4]; // Torso + Neck (0) + Hips (4) bleed
-            maxHeight = 7.7;     // Base of neck
-            minHeight = 4.4;     // Lowered to overlap better with groin
-            includeBones = [
-                getBoneIndex(skeletonProxy, "Hips"),
-                getBoneIndex(skeletonProxy, "Spine"),
-                getBoneIndex(skeletonProxy, "Spine1"),
-                getBoneIndex(skeletonProxy, "Spine2"),
-                getBoneIndex(skeletonProxy, "Neck")
-            ];
-
-        } else if (slot === "Shoulders") {
-            regions = [2, 3, 1]; // Arm regions + Torso overlap to close gaps
-            includeBones = [
-                getBoneIndex(skeletonProxy, "LeftShoulder"),
-                getBoneIndex(skeletonProxy, "LeftArm"),
-                getBoneIndex(skeletonProxy, "RightShoulder"),
-                getBoneIndex(skeletonProxy, "RightArm")
-            ];
-            minHeight = 6.4; // Lower slightly to reach Chestplate
-            maxHeight = 8.1; // Reach up to cover collarbone
-            inflation += 0.4; // Restore some bulk for coverage
-
-        } else if (slot === "Arms") {
-            regions = [2, 3]; // Arm regions only (Remove Torso bleed)
-            includeBones = [
-                getBoneIndex(skeletonProxy, "LeftArm"),
-                getBoneIndex(skeletonProxy, "LeftForeArm"),
-                getBoneIndex(skeletonProxy, "RightArm"),
-                getBoneIndex(skeletonProxy, "RightForeArm")
-            ];
-            exclusions = [
-                getBoneIndex(skeletonProxy, "LeftHand"),
-                getBoneIndex(skeletonProxy, "RightHand"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex1"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex2"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex3"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex4"),
-                getBoneIndex(skeletonProxy, "RightHandIndex1"),
-                getBoneIndex(skeletonProxy, "RightHandIndex2"),
-                getBoneIndex(skeletonProxy, "RightHandIndex3"),
-                getBoneIndex(skeletonProxy, "RightHandIndex4")
-            ];
-
-        } else if (slot === "Legs") {
-            regions = [1, 4, 5, 6, 0]; // Catch everything from waist down
-            minHeight = 0.6;
-            maxHeight = 6.0; // High-waist to overlap breastplate (starts at 4.4)
-            inflation = 4.2;
-            includeBones = [
-                getBoneIndex(skeletonProxy, "Hips"),
-                getBoneIndex(skeletonProxy, "LeftUpLeg"),
-                getBoneIndex(skeletonProxy, "LeftLeg"),
-                getBoneIndex(skeletonProxy, "RightUpLeg"),
-                getBoneIndex(skeletonProxy, "RightLeg")
-            ];
-            exclusions = [
-                getBoneIndex(skeletonProxy, "LeftFoot"),
-                getBoneIndex(skeletonProxy, "RightFoot"),
-                getBoneIndex(skeletonProxy, "LeftToeBase"),
-                getBoneIndex(skeletonProxy, "RightToeBase")
-            ];
-            if (matType === 'cloth') inflation = 1.2;
-            if (matType === 'cloth') exclusions = [];
-
-        } else if (slot === "Feet") {
-            // SLEDGEHAMMER: Include ALL regions (0-31) for the feet slot.
-            // maxHeight will keep it strictly at the ankle level.
-            regions = Array.from({ length: 32 }, (_, i) => i);
-            maxHeight = 1.2;
-            includeBones = [
-                getBoneIndex(skeletonProxy, "LeftLeg"),
-                getBoneIndex(skeletonProxy, "RightLeg"),
-                getBoneIndex(skeletonProxy, "LeftFoot"),
-                getBoneIndex(skeletonProxy, "LeftToeBase"),
-                getBoneIndex(skeletonProxy, "LeftToe_End"),
-                getBoneIndex(skeletonProxy, "LeftToe_End_end"),
-                getBoneIndex(skeletonProxy, "RightFoot"),
-                getBoneIndex(skeletonProxy, "RightToeBase"),
-                getBoneIndex(skeletonProxy, "RightToe_End"),
-                getBoneIndex(skeletonProxy, "RightToe_End_end")
-            ];
-            exclusions = [
-                getBoneIndex(skeletonProxy, "LeftUpLeg"),
-                getBoneIndex(skeletonProxy, "RightUpLeg"),
-                getBoneIndex(skeletonProxy, "Hips"),
-                getBoneIndex(skeletonProxy, "Spine")
-            ];
-            if (type.includes("Plate")) inflation = 3.5; // Specific plate boost
-            else if (type.includes("Cloth") || type.includes("Shoes")) inflation = 1.4;
-            else inflation = 2.4;
-
-        } else if (slot === "Hands") {
-            regions = [2, 3];
-            // Hands must be SLIMMER and stop at wrist
-            inflation = 1.2;
-            smoothing = 5;
-            includeBones = [
-                getBoneIndex(skeletonProxy, "LeftHand"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex1"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex2"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex3"),
-                getBoneIndex(skeletonProxy, "LeftHandIndex4"),
-                getBoneIndex(skeletonProxy, "RightHand"),
-                getBoneIndex(skeletonProxy, "RightHandIndex1"),
-                getBoneIndex(skeletonProxy, "RightHandIndex2"),
-                getBoneIndex(skeletonProxy, "RightHandIndex3"),
-                getBoneIndex(skeletonProxy, "RightHandIndex4")
-            ];
-            // EXCLUDE EVERYTHING ELSE to kill blobs on bicep/torso
-            exclusions = [
-                getBoneIndex(skeletonProxy, "LeftArm"),
-                getBoneIndex(skeletonProxy, "RightArm"),
-                getBoneIndex(skeletonProxy, "LeftShoulder"),
-                getBoneIndex(skeletonProxy, "RightShoulder"),
-                getBoneIndex(skeletonProxy, "Hips"),
-                getBoneIndex(skeletonProxy, "Spine"),
-                getBoneIndex(skeletonProxy, "Spine1")
-            ];
-            // Forearm is NOT excluded anymore, allowing "Bleed" to cover the wrist.
-
-        } else if (slot === "Head") {
-            regions = [0]; // Head
-            if (type.includes("Cloth")) inflation = 1.25;
-            else inflation = 1.5;
-
-        } else if (slot === "Cap") {
-            regions = [0]; // Head
-            inflation = 1.25; // Snug fit (Cloth/Leather default)
-            matType = 'leather';
-            // CLIPPING: Start high up (Crown only)
-            // Estimation: Neck=8.0 -> Mid-Head=8.8
-            // 8.8 was "Small Patch". 
-            minHeight = 8.5;
-        }
-
-        // 3. GENERATE
-        if (regions.length > 0) {
-            // Unique ID for the mesh
-            const meshName = `armor_${slot}_${type}`;
-            createClothingMesh(meshName, regions, inflation, part.color, matType, exclusions, maxHeight, includeBones, smoothing, minHeight);
-        }
-    });
-
-    renderFace(bodyParts);
 }
 
 export function downloadModel(filename) {
